@@ -1,0 +1,39 @@
+- op: add
+  path: /spec/template/spec/containers/0/env
+  value:
+    - name: DOCKER_CONFIG
+      value: /tmp/.docker/
+    - name: MANIFEST_STORAGE_TYPE
+      value: oci #/git
+    - name: OCI_IMAGE_REGISTRY
+      value: gcr.io/kg-image-registry
+    - name: OCI_IMAGE_PREFIX
+      value: "argocd.apps.ma4kmc2"
+    - name: OCI_IMAGE_TAG
+      value: "mnf"        
+    - name: REKOR_SERVER
+      value: https://rekor.sigstore.dev
+    - name: COSIGN_PASSWORD
+      value: ""
+    - name: MANIFEST_GITREPO_URL  
+      value: ""     
+    - name: MANIFEST_GITREPO_TOKEN
+      value: "" 
+    - name: MANIFEST_GITREPO_USER
+      value: "" 
+    - name: MANIFEST_GITREPO_USEREMAIL
+      value: "" 
+    - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
+      value: info
+    - name: ARGOCD_INTERLACE_LOG_LEVEL
+      value: info
+    - name: ARGOCD_API_BASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: argocd-token-secret
+          key: ARGOCD_API_BASE_URL
+    - name: ARGOCD_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: argocd-token-secret
+          key: ARGOCD_TOKEN

@@ -16,79 +16,12 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev99
+          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
           imagePullPolicy: Always
           command:
             - argocd-interlace
           args:
             - --namespace=argocd
-          env:
-            - name: COSIGN_PASSWORD
-              value: ""
-            - name: DOCKER_CONFIG
-              value: /tmp/.docker/
-            - name: MANIFEST_STORAGE
-              value: OCI # GIT/COS   
-            - name: IMAGE_REGISTRY
-              value: gcr.io/kg-image-registry
-            - name: MANIFEST_GITREPO_URL
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_URL
-            - name: MANIFEST_GITREPO_USER
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_USER
-            - name: MANIFEST_GITREPO_USEREMAIL
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_USEREMAIL
-            - name: MANIFEST_GITREPO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_TOKEN
-            - name: MANIFEST_GITREPO_TARGET_REVISION
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_TARGET_REVISION
-            - name: MANIFEST_GITREPO_ARGO_PROJECT
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_ARGO_PROJECT
-            - name: MANIFEST_GITREPO_TARGET_NS
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_TARGET_NS
-            - name: MANIFEST_GITREPO_SUFFIX
-              valueFrom:
-                secretKeyRef:
-                  name: manifest-gitrepo-secret
-                  key: MANIFEST_GITREPO_SUFFIX
-            - name: IMAGE_PREFIX
-              value: argocd.apps.ma4kmc2
-            - name: IMAGE_TAG
-              value: mnf
-            - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
-              value: debug
-            - name: ARGOCD_INTERLACE_LOG_LEVEL
-              value: info
-            - name: ARGOCD_API_BASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: argocd-token-secret
-                  key: ARGOCD_API_BASE_URL
-            - name: ARGOCD_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: argocd-token-secret
-                  key: ARGOCD_TOKEN
           volumeMounts:
             - name: output
               mountPath: /tmp/output

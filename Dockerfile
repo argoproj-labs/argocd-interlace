@@ -14,28 +14,32 @@
 # limitations under the License.
 #
 
+
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.1
 
-RUN mkdir -p /ishield-app && mkdir -p /ishield-app/public
 
-RUN chgrp -R 0 /ishield-app && chmod -R g=u /ishield-app
+RUN mkdir -p /interlace-app && mkdir -p /interlace-app/public
+
+RUN chgrp -R 0 /interlace-app && chmod -R g=u /interlace-app
 
 COPY build/_bin/argocd-interlace /usr/local/bin/argocd-interlace
 
-COPY rekor/rekor-cli /usr/local/bin/rekor-cli
+RUN curl -Lo rekor-cli https://github.com/sigstore/rekor/releases/download/v0.3.0/rekor-cli-linux-amd64 &&\
+    mv rekor-cli /usr/local/bin/rekor-cli &&\
+    chmod +x /usr/local/bin/rekor-cli
 
-WORKDIR /ishield-app
-COPY scripts/generate_signedcm.sh /ishield-app/generate_signedcm.sh
-COPY scripts/gpg-annotation-sign.sh /ishield-app/gpg-annotation-sign.sh
-COPY scripts/x509-annotation-sign.sh /ishield-app/x509-annotation-sign.sh
+WORKDIR /interlace-app
+COPY scripts/generate_manifest_bundle.sh /interlace-app/generate_manifest_bundle.sh
+COPY scripts/gpg-annotation-sign.sh /interlace-app/gpg-annotation-sign.sh
+COPY scripts/x509-annotation-sign.sh /interlace-app/x509-annotation-sign.sh
 
-RUN chmod +x /ishield-app/generate_signedcm.sh &&\
-    chmod +x /ishield-app/gpg-annotation-sign.sh &&\
-    chmod +x /ishield-app/x509-annotation-sign.sh
+RUN chmod +x /interlace-app/generate_manifest_bundle.sh &&\
+    chmod +x /interlace-app/gpg-annotation-sign.sh &&\
+    chmod +x /interlace-app/x509-annotation-sign.sh
 
-COPY yq /usr/bin/yq
-
-RUN  chmod +x /usr/bin/yq
+RUN curl -Lo yq https://github.com/mikefarah/yq/releases/download/3.4.0/yq_linux_amd64 &&\
+    mv yq /usr/bin/yq &&\
+    chmod +x /usr/bin/yq
 
 RUN yq -V
 

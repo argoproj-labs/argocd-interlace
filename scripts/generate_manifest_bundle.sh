@@ -15,15 +15,16 @@
 # limitations under the License.
 
 CMDNAME=`basename $0`
-if [ $# -ne 3 ]; then
-  echo "Usage: $CMDNAME <signed-manifest> <name> <output-file>" 1>&2
+if [ $# -ne 4 ]; then
+  echo "Usage: $CMDNAME <signed-manifest> <provenance> <name> <output-file>" 1>&2
   exit 1
 fi
 
 
 SIGNED_MANIFEST=$1
-NAME=$2
-OUTPUT_FILE=$3
+PROVENANCE_FILE=$2
+NAME=$3
+OUTPUT_FILE=$4
 
 if [ -f $OUTPUT_FILE ]; then
    rm $OUTPUT_FILE
@@ -50,9 +51,13 @@ if [[ $YQ_VERSION == "3" ]]; then
     message=$(cat $SIGNED_MANIFEST| yq r - 'metadata.annotations."cosign.sigstore.dev/message"')
     signature=$(cat $SIGNED_MANIFEST| yq r - 'metadata.annotations."cosign.sigstore.dev/signature"')
 
+    provenance:=$(cat $PROVENANCE_FILE | base64 -w 0)
+
     yq w -i $OUTPUT_FILE metadata.name "$NAME"  
     yq w -i $OUTPUT_FILE data.signature "$signature"
     yq w -i $OUTPUT_FILE data.message "$message"
+    yq w -i $OUTPUT_FILE data.provenance "$provenance"
+    
 fi
 
 if [ -f $OUTPUT_FILE ]; then

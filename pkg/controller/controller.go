@@ -1,3 +1,19 @@
+//
+// Copyright 2021 IBM Corporation
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 package controller
 
 import (
@@ -6,10 +22,10 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/IBM/argocd-interlace/pkg/interlace"
+	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	appClientset "github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
-	"github.com/gajananan/argocd-interlace/pkg/interlace"
-	"github.com/gajananan/argocd-interlace/pkg/utils"
 
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +48,7 @@ func Start(ctx context.Context, config string, namespace string) {
 	_, cfg, err := utils.GetClient(config)
 	appClientset := appClientset.NewForConfigOrDie(cfg)
 	if err != nil {
-		log.Fatalf("error occured during starting argocd interlace controller", err.Error())
+		log.Fatalf("Error in starting argocd interlace controller: %s", err.Error())
 	}
 
 	c := newController(appClientset, namespace)
@@ -73,13 +89,16 @@ func newController(applicationClientset appClientset.Interface, namespace string
 				return
 			}
 			key, err := cache.MetaNamespaceKeyFunc(obj)
-			/*
-				app, ok := obj.(*appv1.Application)
 
-				if ok {
-					interlace.CreateEventHandler(app)
+			app, ok := obj.(*appv1.Application)
+
+			if ok {
+				err := interlace.CreateEventHandler(app)
+				if err != nil {
+					log.Errorf("Error in handling create event: %s", err.Error())
 				}
-			*/
+			}
+
 			if err == nil {
 				ctrl.appRefreshQueue.Add(key)
 			}
@@ -93,7 +112,10 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			oldApp, oldOK := old.(*appv1.Application)
 			newApp, newOK := new.(*appv1.Application)
 			if oldOK && newOK {
-				interlace.UpdateEventHandler(oldApp, newApp)
+				err := interlace.UpdateEventHandler(oldApp, newApp)
+				if err != nil {
+					log.Errorf("Error in handling update event: %s", err.Error())
+				}
 			}
 
 			if err == nil {
@@ -108,7 +130,7 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 
 			if err == nil {
-				log.Debug("Event received of type delete for key [%s] ", key)
+				log.Debug("Event received of type delete for key ", key)
 				//ctrl.appRefreshQueue.Add(key)
 			}
 
@@ -121,10 +143,10 @@ func newController(applicationClientset appClientset.Interface, namespace string
 
 func (c *controller) canProcessApp(obj interface{}) bool {
 	_, ok := obj.(*appv1.Application)
-	if !ok {
-		return false
+	if ok {
+		return ok
 	}
-	return true
+	return false
 }
 
 func (c *controller) Run(ctx context.Context) {
@@ -197,7 +219,6 @@ func (c *controller) processItem(key string) error {
 		log.Warnf("Key '%s' in index is not an application", key)
 		return nil
 	}
-	//Use a switch clause instead and process the events based on the type
 
 	return nil
 }

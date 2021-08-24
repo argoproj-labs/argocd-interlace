@@ -1,5 +1,6 @@
 NAME=gcr.io/kg-image-registry/argocd-interlace-controller
-VERSION=dev99
+VERSION=dev
+TMP_DIR=/tmp/
 
 .PHONY: build build-cli build-core, deploy, delete
 
@@ -42,3 +43,12 @@ deploy-argocd-interlace:
 delete-argocd-interlace:
 	@echo deleting argocd-interlace
 	kustomize build deploy | kubectl delete -f -
+
+
+lint-init:
+	 golangci-lint run --timeout 5m -D errcheck,unused,gosimple,deadcode,staticcheck,structcheck,ineffassign,varcheck > $(TMP_DIR)lint_results_interlace.txt
+
+lint-verify:
+	$(eval FAILURES=$(shell cat $(TMP_DIR)lint_results_interlace.txt | grep "FAIL:"))
+	cat  $(TMP_DIR)lint_results_interlace.txt
+	@$(if $(strip $(FAILURES)), echo "One or more linters failed. Failures: $(FAILURES)"; exit 1, echo "All linters are passed successfully."; exit 0)

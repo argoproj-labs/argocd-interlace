@@ -1,28 +1,46 @@
+//
+// Copyright 2021 IBM Corporation
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
 package oci
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/gajananan/argocd-interlace/pkg/provenance"
-	"github.com/gajananan/argocd-interlace/pkg/sign"
-	"github.com/gajananan/argocd-interlace/pkg/utils"
+	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
+	"github.com/IBM/argocd-interlace/pkg/sign"
+	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/google/go-containerregistry/pkg/crane"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
 )
 
 type StorageBackend struct {
-	appName            string
-	appPath            string
-	appDirPath         string
-	appSourceRepoUrl   string
-	appSourceRevision  string
-	appSourceCommitSha string
-	imageRef           string
-	buildStartedOn     time.Time
-	buildFinishedOn    time.Time
+	appName                     string
+	appPath                     string
+	appDirPath                  string
+	appSourceRepoUrl            string
+	appSourceRevision           string
+	appSourceCommitSha          string
+	appSourcePreiviousCommitSha string
+	imageRef                    string
+	buildStartedOn              time.Time
+	buildFinishedOn             time.Time
 }
 
 const (
@@ -30,34 +48,36 @@ const (
 )
 
 func NewStorageBackend(appName, appPath, appDirPath,
-	appSourceRepoUrl, appSourceRevision, appSourceCommitSha string) (*StorageBackend, error) {
+	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha string) (*StorageBackend, error) {
 	return &StorageBackend{
-		appName:            appName,
-		appPath:            appPath,
-		appDirPath:         appDirPath,
-		appSourceRepoUrl:   appSourceRepoUrl,
-		appSourceRevision:  appSourceRevision,
-		appSourceCommitSha: appSourceCommitSha,
+		appName:                     appName,
+		appPath:                     appPath,
+		appDirPath:                  appDirPath,
+		appSourceRepoUrl:            appSourceRepoUrl,
+		appSourceRevision:           appSourceRevision,
+		appSourceCommitSha:          appSourceCommitSha,
+		appSourcePreiviousCommitSha: appSourcePreiviousCommitSha,
+		imageRef:                    getImageRef(appName),
 	}, nil
 }
 
 func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
 
-	// Retrive the bundle image name and tag based on configuration and appName
-	imageRef := getImageRef(s.appName)
-
-	s.imageRef = imageRef
-
+	if s.imageRef == "" {
+		return nil, fmt.Errorf("Error in fetching imageRef")
+	}
 	// Check if the there is an existing bundle manifest in the storage
-	bundleYAMLBytes, err := getBundleManifest(imageRef)
+	bundleYAMLBytes, err := getBundleManifest(s.imageRef)
 
 	if err != nil {
+		log.Errorf("Error in retriving bundle manifest image: %s", err.Error())
 		return nil, err
 	}
 	return bundleYAMLBytes, nil
 }
 
-func (s StorageBackend) StoreManifestSignature() error {
+func (s StorageBackend) StoreManifestBundle() error {
+	log.Infof("Storing manifest in OCI: %s ", s.imageRef)
 
 	keyPath := utils.PRIVATE_KEY_PATH
 	manifestPath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
@@ -66,16 +86,27 @@ func (s StorageBackend) StoreManifestSignature() error {
 	err := sign.SignManifest(s.imageRef, keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
-		log.Info("Error in signing bundle image err %s", err.Error())
+		log.Errorf("Error in signing bundle image: %s", err.Error())
 		return err
 	}
 
-	return nil
-}
+	log.Infof("Storing manifest provenance for OCI: %s ", s.imageRef)
 
-func (s StorageBackend) StoreManifestProvenance() error {
-	provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl, s.appSourceRevision, s.appSourceCommitSha,
-		s.imageRef, s.buildStartedOn, s.buildFinishedOn)
+	imageDigest, err := getDigest(s.imageRef)
+
+	if err != nil {
+		log.Errorf("Error in getting digest: %s ", err.Error())
+		return err
+	}
+
+	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
+		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
+		s.imageRef, imageDigest, s.buildStartedOn, s.buildFinishedOn)
+	if err != nil {
+		log.Errorf("Error in storing provenance: %s", err.Error())
+		return err
+	}
+
 	return nil
 }
 
@@ -98,13 +129,13 @@ func getBundleManifest(imageRef string) ([]byte, error) {
 	image, err := k8smnfutil.PullImage(imageRef)
 
 	if err != nil {
-		log.Info("Error in pulling image err %s", err.Error())
+		log.Infof("Error in pulling image err %s", err.Error())
 		return nil, err
 	}
 
 	concatYAMLbytes, err := k8smnfutil.GenerateConcatYAMLsFromImage(image)
 	if err != nil {
-		log.Info("Error in GenerateConcatYAMLsFromImage err %s", err.Error())
+		log.Infof("Error in GenerateConcatYAMLsFromImage err %s", err.Error())
 		return nil, err
 	}
 	return concatYAMLbytes, nil
@@ -112,26 +143,17 @@ func getBundleManifest(imageRef string) ([]byte, error) {
 
 func getImageRef(appName string) string {
 
-	imageRegistry := os.Getenv("IMAGE_REGISTRY")
-
-	if imageRegistry == "" {
-		log.Info("IMAGE_REGISTRY is empty, please specify in configuration !")
+	interlaceConfig, err := config.GetInterlaceConfig()
+	if err != nil {
+		log.Errorf("Error in loading config: %s", err.Error())
 		return ""
 	}
 
-	imagePrefix := os.Getenv("IMAGE_PREFIX")
+	imageRegistry := interlaceConfig.OciImageRegistry
 
-	if imagePrefix == "" {
-		log.Info("IMAGE_PREFIX is empty please specify in configuration!")
-		return ""
-	}
+	imagePrefix := interlaceConfig.OciImagePrefix
 
-	imageTag := os.Getenv("IMAGE_TAG")
-
-	if imageTag == "" {
-		log.Info("IMAGE_TAG is empty please specify in configuration!")
-		return ""
-	}
+	imageTag := interlaceConfig.OciImageTag
 
 	imageName := fmt.Sprintf("%s-%s", imagePrefix, appName)
 
@@ -139,4 +161,13 @@ func getImageRef(appName string) string {
 
 	return imageRef
 
+}
+
+func getDigest(src string) (string, error) {
+
+	digest, err := crane.Digest(src)
+	if err != nil {
+		return "", fmt.Errorf("fetching digest %s: %v", src, err)
+	}
+	return digest, nil
 }
