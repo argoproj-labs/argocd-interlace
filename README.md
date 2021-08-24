@@ -14,3 +14,7 @@ The features are
 - Capture manifest and provenance from application.status automatically
 - Sign manifest
 - Record provenance in intoto format
+
+
+ Demo
+ ![intro](images/intro.gif?)

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-interlace-controller
+  namespace: argocd-interlace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argocd-interlace-controller
+  template:
+    metadata:
+      labels:
+        app: argocd-interlace-controller
+    spec:
+      serviceAccountName: argocd-interlace-controller
+      containers:
+        - name: argocd-interlace-controller
+          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+          imagePullPolicy: Always
+          command:
+            - argocd-interlace
+          args:
+            - --namespace=argocd
+          volumeMounts:
+            - name: output
+              mountPath: /tmp/output
+            - name: signing-secrets
+              mountPath: /etc/signing-secrets
+            - name: gcr-registry-docker-config
+              mountPath: /tmp/.docker/
+      volumes:
+        - name: signing-secrets
+          secret:
+            secretName: signing-secrets
+        - name: output
+          emptyDir: {}
+        - name: gcr-registry-docker-config
+          secret:
+            secretName: argocd-interlace-gcr-secret
+            items:
+              - key: .dockerconfigjson
+                path: config.json
