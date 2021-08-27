@@ -49,7 +49,7 @@ func GenerateInitialManifest(appName, appPath, appDirPath string) (bool, error) 
 
 		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(items.Array())-1)
 	}
-
+	//fmt.Println("[INFO]:", finalManifest)
 	if finalManifest != "" {
 
 		err := utils.WriteToFile(string(finalManifest), appDirPath, utils.MANIFEST_FILE_NAME)
@@ -96,7 +96,7 @@ func GenerateManifest(appName, appDirPath string, yamlBytes []byte) (bool, error
 		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(items.Array())-1)
 
 	}
-
+	//fmt.Println("[INFO]:", finalManifest)
 	if finalManifest != "" {
 		err := utils.WriteToFile(string(finalManifest), appDirPath, utils.MANIFEST_FILE_NAME)
 		if err != nil {

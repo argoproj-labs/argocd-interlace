@@ -43,6 +43,7 @@ type StorageBackend struct {
 	appName                     string
 	appPath                     string
 	appDirPath                  string
+	clusterName                 string
 	appSourceRepoUrl            string
 	appSourceRevision           string
 	appSourceCommitSha          string
@@ -59,7 +60,7 @@ const (
 	StorageBackendGit = "git"
 )
 
-func NewStorageBackend(appName, appPath, appDirPath,
+func NewStorageBackend(appName, appPath, appDirPath, clusterName,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha string,
 ) (*StorageBackend, error) {
 
@@ -73,6 +74,7 @@ func NewStorageBackend(appName, appPath, appDirPath,
 		appName:                     appName,
 		appPath:                     appPath,
 		appDirPath:                  appDirPath,
+		clusterName:                 clusterName,
 		appSourceRepoUrl:            appSourceRepoUrl,
 		appSourceRevision:           appSourceRevision,
 		appSourceCommitSha:          appSourceCommitSha,
@@ -93,7 +95,7 @@ func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
 	}
 
 	configFileName := fmt.Sprintf("%s-%s", s.appName, utils.CONFIG_FILE_NAME)
-	configFilePath := filepath.Join(utils.MANIFEST_DIR, configFileName)
+	configFilePath := filepath.Join(utils.MANIFEST_DIR, s.clusterName, configFileName)
 
 	file, err := fs.Open(configFilePath)
 
@@ -162,9 +164,10 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 	signedManifestFilePath := filepath.Join(s.appDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
 
-	fileName := signedManifestFilePath
-	log.Infof("Storing manifest provenance for GIT: %s ", fileName)
-	fileHash, err := utils.Sha256Hash(signedManifestFilePath)
+	generatedManifestFilePath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
+
+	log.Infof("Storing signed manifest file: %s ", generatedManifestFilePath)
+	fileHash, err := utils.Sha256Hash(generatedManifestFilePath)
 	if err != nil {
 		log.Errorf("Error in retrieving files digest : %s", err.Error())
 		return err
@@ -172,17 +175,17 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
 		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
-		fileName, fileHash, s.buildStartedOn, s.buildFinishedOn)
+		generatedManifestFilePath, fileHash, s.buildStartedOn, s.buildFinishedOn, false)
 	if err != nil {
 		log.Errorf("Error in storing provenance: %s", err.Error())
 		return err
 	}
 
-	provFilePath := filepath.Join(s.appDirPath, utils.PROVENANCE_FILE_NAME)
+	attestationFilePath := filepath.Join(s.appDirPath, utils.ATTESTATION_FILE_NAME)
 
 	name := s.appName + "-manifest-sig"
 
-	out, err := k8smnfutil.CmdExec("/interlace-app/generate_manifest_bundle.sh", signedManifestFilePath, provFilePath, name, newConfigFilePath)
+	out, err := k8smnfutil.CmdExec("/interlace-app/generate_manifest_bundle.sh", signedManifestFilePath, attestationFilePath, name, newConfigFilePath)
 
 	if err != nil {
 		log.Errorf("Error in generating signed configmap: %s", err.Error())
@@ -191,7 +194,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 	log.Debug("Results from command execution: ", out)
 
-	err = gitCloneAndUpdate(s.appName, s.appPath, s.appDirPath,
+	err = gitCloneAndUpdate(s.appName, s.appPath, s.appDirPath, s.clusterName,
 		s.manifestGitUrl, s.manifestGitUserId, s.manifestGitUserEmail, s.manifestGitToken)
 
 	if err != nil {
@@ -215,7 +218,7 @@ func (b *StorageBackend) Type() string {
 	return StorageBackendGit
 }
 
-func gitCloneAndUpdate(appName, appPath, appDirPath, gitUrl, gitUser, gitUserEmail, gitToken string) error {
+func gitCloneAndUpdate(appName, appPath, appDirPath, clusterName, gitUrl, gitUser, gitUserEmail, gitToken string) error {
 
 	fs, repo, err := gitClone(gitUrl, gitUser, gitToken)
 	if err != nil {
@@ -231,8 +234,9 @@ func gitCloneAndUpdate(appName, appPath, appDirPath, gitUrl, gitUser, gitUserEma
 
 	//absFilePath := filepath.Join(appName, appPath, utils.CONFIG_FILE_NAME)
 	//absFilePath := filepath.Join(appName, utils.CONFIG_FILE_NAME)
+
 	configFileName := fmt.Sprintf("%s-%s", appName, utils.CONFIG_FILE_NAME)
-	configFilePath := filepath.Join(utils.MANIFEST_DIR, configFileName)
+	configFilePath := filepath.Join(utils.MANIFEST_DIR, clusterName, configFileName)
 
 	log.Debug("configFilePath ", configFilePath)
 

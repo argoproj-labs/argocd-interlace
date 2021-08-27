@@ -4,7 +4,7 @@
     - name: DOCKER_CONFIG
       value: /tmp/.docker/
     - name: MANIFEST_STORAGE_TYPE
-      value: oci #/git
+      value: oci #/git/oci
     - name: OCI_IMAGE_REGISTRY
       value: gcr.io/kg-image-registry
     - name: OCI_IMAGE_PREFIX
@@ -15,18 +15,57 @@
       value: https://rekor.sigstore.dev
     - name: COSIGN_PASSWORD
       value: ""
+    - name: MANIFEST_ARGOCD_PROJECT
+      value: default
     - name: MANIFEST_GITREPO_URL  
-      value: ""     
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_URL
+    - name: MANIFEST_GITREPO_SUFFIX
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_SUFFIX
+    - name: MANIFEST_GITREPO_BRANCH
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_BRANCH
     - name: MANIFEST_GITREPO_TOKEN
-      value: "" 
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_TOKEN
     - name: MANIFEST_GITREPO_USER
-      value: "" 
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_USER
     - name: MANIFEST_GITREPO_USEREMAIL
-      value: "" 
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_USEREMAIL
+    - name: MANIFEST_DEST_NAMESPACE
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_DEST_NAMESPACE
+    - name: MANIFEST_GITREPO_MODE
+      valueFrom:
+        secretKeyRef:
+          name: interlace-manifest-git-secret
+          key: MANIFEST_GITREPO_MODE
     - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
       value: info
     - name: ARGOCD_INTERLACE_LOG_LEVEL
       value: info
+    - name: "ARGOCD_NAMESPACE"  
+      valueFrom:
+        secretKeyRef:
+          name: argocd-token-secret
+          key: ARGOCD_NAMESPACE
     - name: ARGOCD_API_BASE_URL
       valueFrom:
         secretKeyRef:

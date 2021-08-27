@@ -51,7 +51,7 @@ if [[ $YQ_VERSION == "3" ]]; then
     message=$(cat $SIGNED_MANIFEST| yq r - 'metadata.annotations."cosign.sigstore.dev/message"')
     signature=$(cat $SIGNED_MANIFEST| yq r - 'metadata.annotations."cosign.sigstore.dev/signature"')
 
-    provenance:=$(cat $PROVENANCE_FILE | base64 -w 0)
+    provenance=$(cat $PROVENANCE_FILE | base64 -w 0)
 
     yq w -i $OUTPUT_FILE metadata.name "$NAME"  
     yq w -i $OUTPUT_FILE data.signature "$signature"

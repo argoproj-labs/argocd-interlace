@@ -62,7 +62,7 @@ var (
 
 func GenerateProvanance(appName, appPath,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreviousCommitSha,
-	target, targetDigest string, buildStartedOn, buildFinishedOn time.Time) error {
+	target, targetDigest string, buildStartedOn, buildFinishedOn time.Time, uploadTLog bool) error {
 
 	//TODO
 	//TraceProvenance(appSourceRepoUrl, appSourcePreviousCommitSha, appSourceCommitSha)
@@ -70,7 +70,7 @@ func GenerateProvanance(appName, appPath,
 	subjects := []in_toto.Subject{}
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
-	log.Info("targetDigest ", targetDigest)
+
 	subjects = append(subjects, in_toto.Subject{Name: target,
 		Digest: in_toto.DigestSet{
 			"sha256": targetDigest,
@@ -116,7 +116,7 @@ func GenerateProvanance(appName, appPath,
 		return err
 	}
 
-	err = generateSignedAttestation(it, appDirPath)
+	err = generateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
@@ -141,7 +141,7 @@ func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, app
 	return materials
 }
 
-func generateSignedAttestation(it in_toto.Statement, appDirPath string) error {
+func generateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) error {
 
 	b, err := json.Marshal(it)
 	if err != nil {
@@ -209,7 +209,9 @@ func generateSignedAttestation(it in_toto.Statement, appDirPath string) error {
 
 	attestationPath := filepath.Join(appDirPath, utils.ATTESTATION_FILE_NAME)
 
-	upload(it, attestationPath)
+	if uploadTLog {
+		upload(it, attestationPath, appName)
+	}
 
 	return nil
 
@@ -276,7 +278,7 @@ func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
 	return errors.New("invalid signature")
 }
 
-func upload(it in_toto.Statement, attestationPath string) {
+func upload(it in_toto.Statement, attestationPath, appName string) {
 
 	pubKeyPath := utils.PUB_KEY_PATH
 	// If we do it twice, it should already exist
@@ -284,11 +286,15 @@ func upload(it in_toto.Statement, attestationPath string) {
 
 	outputContains(out, "Created entry at")
 
-	uuid := getUUIDFromUploadOutput(out)
+	_ = getUUIDFromUploadOutput(out)
 
-	log.Infof("%s", out)
+	log.Infof("[INFO][%s] Interlace generated provenance record of manifest build", appName)
 
-	log.Infof("Uploaded attestation to tlog,  uuid: %s", uuid)
+	log.Infof("[INFO][%s] Interlace stores attestation to provenance record to Rekor transparency log", appName)
+
+	log.Infof("[INFO][%s] %s", appName, out)
+
+	//log.Infof("[INFO]: Uploaded attestation to tlog,  uuid: %s", uuid)
 }
 
 func outputContains(output, sub string) {
