@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-helloworld
+  namespace: argocd
+spec:
+  destination:
+    namespace: helloworld-ns
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    path: examples/helloWorld/
+    repoURL: https://github.com/kubernetes-sigs/kustomize
+    targetRevision: master
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd-interlace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-interlace-controller
+  namespace: argocd-interlace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-interlace-controller-tenant-access
+rules:
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-interlace-controller-tenant-access
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-interlace-controller-tenant-access
+subjects:
+- kind: ServiceAccount
+  name: argocd-interlace-controller
+  namespace: argocd-interlace
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-interlace-gcr-secret
+  namespace: argocd-interlace
+type: Opaque
+---
+apiVersion: v1
+data:
+  ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
+  ARGOCD_NAMESPACE: UkVQTEFDRSBUSElTCg==
+  ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
+kind: Secret
+metadata:
+  name: argocd-token-secret
+  namespace: argocd-interlace
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: signing-secrets
+  namespace: argocd-interlace
+type: Opaque
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-interlace-controller
+  namespace: argocd-interlace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argocd-interlace-controller
+  template:
+    metadata:
+      labels:
+        app: argocd-interlace-controller
+    spec:
+      containers:
+      - args:
+        - --namespace=argocd
+        command:
+        - argocd-interlace
+        env:
+        - name: DOCKER_CONFIG
+          value: /tmp/.docker/
+        - name: MANIFEST_STORAGE_TYPE
+          value: oci
+        - name: OCI_IMAGE_REGISTRY
+          value: gcr.io/<some-registry-name>
+        - name: OCI_IMAGE_PREFIX
+          value: argocd.apps
+        - name: OCI_IMAGE_TAG
+          value: mnf
+        - name: REKOR_SERVER
+          value: https://rekor.sigstore.dev
+        - name: COSIGN_PASSWORD
+          value: ""
+        - name: MANIFEST_GITREPO_URL
+          value: ""
+        - name: MANIFEST_GITREPO_TOKEN
+          value: ""
+        - name: MANIFEST_GITREPO_USER
+          value: ""
+        - name: MANIFEST_GITREPO_USEREMAIL
+          value: ""
+        - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
+          value: info
+        - name: ARGOCD_INTERLACE_LOG_LEVEL
+          value: info
+        - name: ARGOCD_API_BASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: ARGOCD_API_BASE_URL
+              name: argocd-token-secret
+        - name: ARGOCD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: ARGOCD_TOKEN
+              name: argocd-token-secret
+        image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+        imagePullPolicy: Always
+        name: argocd-interlace-controller
+        volumeMounts:
+        - mountPath: /tmp/output
+          name: output
+        - mountPath: /etc/signing-secrets
+          name: signing-secrets
+      serviceAccountName: argocd-interlace-controller
+      volumes:
+      - name: signing-secrets
+        secret:
+          secretName: signing-secrets
+      - emptyDir: {}
+        name: output

@@ -27,17 +27,9 @@ spec:
               mountPath: /tmp/output
             - name: signing-secrets
               mountPath: /etc/signing-secrets
-            - name: gcr-registry-docker-config
-              mountPath: /tmp/.docker/
       volumes:
         - name: signing-secrets
           secret:
             secretName: signing-secrets
         - name: output
           emptyDir: {}
-        - name: gcr-registry-docker-config
-          secret:
-            secretName: argocd-interlace-gcr-secret
-            items:
-              - key: .dockerconfigjson
-                path: config.json

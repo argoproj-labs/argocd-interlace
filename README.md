@@ -15,6 +15,7 @@ The features are
 - Sign manifest
 - Record provenance in intoto format
 
+[Quick Start](docs/quick_start.md)
 
  Demo
  ![intro](images/intro.gif?)
