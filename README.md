@@ -39,6 +39,11 @@ To complete setting up ArgoCD Interlace, configure the followings:
 * [ArgoCD REST API authentication for querying  ArgoCD REST API to retrive desired manifest for an application](docs/argo_setup.md)
 * [Cosign based signing keys for creating signature for desired manifest.](docs/signing_key_setup.md)
 
+ After setting up all required secrets, restart argocd-interlace pod to make configurations to avaiable to Interlace.
+
+ ```shell
+ kubectl delete pod -n argocd-interlace $(kubectl get pod -n argocd-interlace | awk '{print $1 }' | sed -n 2p)
+ ```
 
 ## Example Scenario
 To see ArgoCD Interlace in action, check the [example scenario](docs/example_scenario.md).

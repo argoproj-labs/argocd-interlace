@@ -27,11 +27,3 @@ cat $COSIGN_KEY | base64 | tr -d \\n | read output;\
 cat $COSIGN_PUB | base64 | tr -d \\n | read output;\
     kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.pub\": \"$output\"}}" -v=1
  ```
-
- ## 
-
- After setting up all required secrets, restart argocd-interlace pod to make changes apply.
-
- ```shell
- kubectl delete pod -n argocd-interlace $(kubectl get pod -n argocd-interlace | awk '{print $1 }' | sed -n 2p)
- ```
