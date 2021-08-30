@@ -1,6 +1,6 @@
 ## Authenticating to ArgoCD RÉST API
 
-ArgoCD Interlace requires REST API url and the bearer token (readonly access) available in a secret called `argocd-token-secret`.
+ArgoCD Interlace requires REST API url and the bearer token ([See doc](setup_argocd_account.md) for setting up readonly access token) available in a secret called `argocd-token-secret`.
 
 Save the base URL of ArgoCD REST API server and bearer token as an environment variables:
 
