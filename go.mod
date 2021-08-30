@@ -11,8 +11,6 @@ require (
 	github.com/in-toto/in-toto-golang v0.2.1-0.20210627200632-886210ae2ab9
 	github.com/sigstore/cosign v1.0.1
 	github.com/sigstore/k8s-manifest-sigstore v0.0.0-20210826045054-d360794618ff
-	github.com/sigstore/rekor v0.3.0
-	github.com/sigstore/sigstore v0.0.0-20210726180807-7e34e36ecda1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
 	github.com/theupdateframework/go-tuf v0.0.0-20210722233521-90e262754396

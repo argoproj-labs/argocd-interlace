@@ -70,7 +70,6 @@ func GenerateProvanance(appName, appPath,
 	subjects := []in_toto.Subject{}
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
-
 	subjects = append(subjects, in_toto.Subject{Name: target,
 		Digest: in_toto.DigestSet{
 			"sha256": targetDigest,
