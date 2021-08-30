@@ -6,7 +6,7 @@
     - name: MANIFEST_STORAGE_TYPE
       value: oci #/git/oci
     - name: OCI_IMAGE_REGISTRY
-      value: gcr.io/kg-image-registry
+      value: gcr.io/<some-registry-name>
     - name: OCI_IMAGE_PREFIX
       value: "argocd.apps"
     - name: OCI_IMAGE_TAG
