@@ -15,7 +15,10 @@ The features are
 - Sign manifest
 - Record provenance in intoto format
 
+<<<<<<< HEAD
 [Quick Start](docs/quick_start.md)
+=======
+>>>>>>> 188918efd522372397e083cb031c1d991cdf51cd
 
  Demo
  ![intro](images/intro.gif?)
