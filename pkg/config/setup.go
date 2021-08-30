@@ -19,6 +19,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -87,8 +88,8 @@ func newConfig() (*InterlaceConfig, error) {
 		LogLevel:            logLevel,
 		ManifestStorageType: manifestStorageType,
 		ArgocdNamespace:     argocdNamespace,
-		ArgocdApiBaseUrl:    argocdApiBaseUrl + "/api/v1/applications",
-		ArgocdApiToken:      argocdApiToken,
+		ArgocdApiBaseUrl:    strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdApiToken:      strings.TrimSuffix(argocdApiToken, "\n"),
 	}
 
 	if manifestStorageType == "oci" {

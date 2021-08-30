@@ -294,7 +294,6 @@ func upload(it in_toto.Statement, attestationPath, appName string) {
 
 	log.Infof("[INFO][%s] %s", appName, out)
 
-	//log.Infof("[INFO]: Uploaded attestation to tlog,  uuid: %s", uuid)
 }
 
 func outputContains(output, sub string) {

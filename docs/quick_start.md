@@ -14,6 +14,7 @@ To install the latest version of ArgoCD Interlace to your cluster, run:
 ```
 kubectl apply --filename https://raw.githubusercontent.com/IBM/argocd-interlace/main/releases/release.yaml
 ```
+This creates a default installation of ArgoCD Interlace, however you will need futher setup for seeing it in action.
 
 To verify that installation was successful, ensure Status of pod `argocd-interlace-controller` become `Running`:
 ```shell
@@ -24,13 +25,11 @@ pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          1
 
 ### Setup
 
-To complete setting up ArgoCD Interlace, please follow the steps in [doc](setup.md).
-* Add OCI image registry authentication
-* Add ArgoCD REST API authentication
-* Add Cosign based signing keys
-
-to the ArgoCD Interlace controller.
+To complete setting up ArgoCD Interlace, please follow the steps in [doc](setup.md) to configure the followings: 
+* OCI image registry authentication
+* ArgoCD REST API authentication
+* Cosign based signing keys
 
 
-## Tutorial
-To get started with ArgoCD Interlace, try the [tutorial](tutorial.md).
+## Example Scenario
+To see ArgoCD Interlace in action, check the [example scenario](example_scenario.md).

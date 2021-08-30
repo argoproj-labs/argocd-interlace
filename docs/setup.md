@@ -11,33 +11,28 @@ ArgoCD Interlacer requires to setup access credentials for your OCI image regist
 
 For example, if your OCI image registry is hosted in Google cloud, refer to [here](https://cloud.google.com/docs/authentication/getting-started) for setting up acccess credentials.
 
-To access your image registry from ArgoCD Interlacer, setup a secret `argocd-interlace-gcr-secret` in namespace `argocd-interlace` with credentials as below and give ArgoCD Interlace service account access to the secret.
+To access your image registry from ArgoCD Interlacer, setup a secret `argocd-interlace-gcr-secret` in namespace `argocd-interlace` with credentials as below.
 
 Save the name of your OCI image registry information (email, path to the credential file) as environment variables:
 ```shell
-OCI_IMAGE_REGITSRY_EMAIL="your-email@gmail.com"
-OCI_CREDENTIALS_PATH="/home/image-registry-crendtials.json"
+export OCI_IMAGE_REGITSRY_EMAIL="your-email@gmail.com"
+export OCI_CREDENTIALS_PATH="/home/image-registry-crendtials.json"
 ```
 
-To create secret, run:
+To configure secret `argocd-interlace-gcr-secret`, run:
 ```shell
-kubectl apply secret docker-registry argocd-interlace-gcr-secret\
+kubectl create secret docker-registry argocd-interlace-gcr-secret\
  --docker-server "https://gcr.io" --docker-username _json_key\
  --docker-email "$OCI_IMAGE_REGITSRY_EMAIL"\
  --docker-password="$(cat ${OCI_CREDENTIALS_PATH} | jq -c .)"\
- -n argocd-interlace
-```
-
-Make ArgoCD Interlace service account have access to secret above
-
-```shell
-kubectl patch serviceaccount argocd-interlace-controller \
-  -p "{\"imagePullSecrets\": [{\"name\": \"argocd-interlace-gcr-secret\"}]}" -n argocd-interlace
+ -n argocd-interlace --dry-run=client -ojson | jq -r '.data.".dockerconfigjson"'| read output;\
+     kubectl patch secret argocd-interlace-gcr-secret -n argocd-interlace\
+     -p="{\"data\":{\".dockerconfigjson\": \"$output\"}}" -v=1
 ```
 
 To update OCI Image Registry environment setting for ArgoCD Deployment, run by specifyng your OCI registry name:
 ```shell
-kubectl set env deployment/argocd-interlace-controller OCI_IMAGE_REGISTRY=gcr.io/<some-registry-name>
+kubectl set env deployment/argocd-interlace-controller  -n argocd-interlace OCI_IMAGE_REGISTRY=gcr.io/<some-registry-name>
 ```
 
 ## Authenticating to ArgoCD RÉST API
@@ -51,12 +46,15 @@ export ARGOCD_API_BASE_URL="https://argo-server-argocd.apps.<cluster-host-name>"
 export ARGOCD_TOKEN=<your token>
 ```
 
-To create a secret with for ArgoCD credentials, run:
+To configure a secret `argocd-token-secret` with for ArgoCD credentials, run:
 ```shell
-kubectl apply secret generic argocd-token-secret\
- --from-literal=ARGOCD_TOKEN=${ARGOCD_TOKEN}\
- --from-literal=ARGOCD_API_BASE_URL=${ARGOCD_API_BASE_URL}\
- -n argocd-interlace
+echo $ARGOCD_TOKEN | base64 | read output;\
+     kubectl patch secret argocd-token-secret -n argocd-interlace\
+     -p="{\"data\":{\"ARGOCD_TOKEN\": \"$output\"}}" -v=1
+
+echo $ARGOCD_API_BASE_URL | base64 | read output;\
+     kubectl patch secret argocd-token-secret -n argocd-interlace\
+     -p="{\"data\":{\"ARGOCD_API_BASE_URL\": \"$output\"}}" -v=1
 ```
 
 ## Setting up Cosign Signing
@@ -80,10 +78,19 @@ COSIGN_KEY=./cosign.key
 COSIGN_PUB=./cosign.pub
 ```
 
-To create signing secrets, run:
+To configuure signing secrets, run:
 ```shell
-kubectl apply secret generic signing-secrets\
- --from-file=cosign.key="${COSIGN_KEY}"\
- --from-file=cosign.password="${COSIGN_PUB}"\
- -n argocd-interlace
+cat $COSIGN_KEY | base64 | tr -d \\n | read output;\
+    kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.key\": \"$output\"}}" -v=1
+
+cat $COSIGN_PUB | base64 | tr -d \\n | read output;\
+    kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.pub\": \"$output\"}}" -v=1
+ ```
+
+ ## 
+
+ After setting up all required secrets, restart argocd-interlace pod to make changes apply.
+
+ ```shell
+ kubectl delete pod -n argocd-interlace $(kubectl get pod -n argocd-interlace | awk '{print $1 }' | sed -n 2p)
  ```
