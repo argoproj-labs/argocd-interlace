@@ -31,9 +31,9 @@ type StorageBackend interface {
 	Type() string
 }
 
-func InitializeStorageBackends(appName, appPath, appDirPath,
+func InitializeStorageBackends(appName, appPath, appDirPath, clusterUrl,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-	manifestStorageType string) (map[string]StorageBackend, error) {
+	manifestStorageType, clusterName string) (map[string]StorageBackend, error) {
 
 	configuredStorageBackends := []string{git.StorageBackendGit, oci.StorageBackendOCI}
 
@@ -51,7 +51,8 @@ func InitializeStorageBackends(appName, appPath, appDirPath,
 				storageBackends[backendType] = ociStorageBackend
 
 			case git.StorageBackendGit:
-				gitStorageBackend, err := git.NewStorageBackend(appName, appPath, appDirPath,
+
+				gitStorageBackend, err := git.NewStorageBackend(appName, appPath, appDirPath, clusterName,
 					appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha)
 				if err != nil {
 					return nil, err

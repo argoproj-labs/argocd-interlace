@@ -19,24 +19,31 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type InterlaceConfig struct {
-	LogLevel             string
-	ManifestStorageType  string
-	ArgocdApiBaseUrl     string
-	ArgocdApiToken       string
-	OciImageRegistry     string
-	OciImagePrefix       string
-	OciImageTag          string
-	RekorServer          string
-	RekorTmpDir          string
-	ManifestGitUrl       string
-	ManifestGitUserId    string
-	ManifestGitUserEmail string
-	ManifestGitToken     string
+	LogLevel              string
+	ManifestStorageType   string
+	ArgocdNamespace       string
+	ArgocdApiBaseUrl      string
+	ArgocdApiToken        string
+	OciImageRegistry      string
+	OciImagePrefix        string
+	OciImageTag           string
+	RekorServer           string
+	RekorTmpDir           string
+	ManifestAppSetMode    string
+	ManifestArgocdProj    string
+	ManifestDestNamespace string
+	ManifestSuffix        string
+	ManifestGitUrl        string
+	ManifestGitBranch     string
+	ManifestGitUserId     string
+	ManifestGitUserEmail  string
+	ManifestGitToken      string
 }
 
 var instance *InterlaceConfig
@@ -62,6 +69,11 @@ func newConfig() (*InterlaceConfig, error) {
 		return nil, fmt.Errorf("MANIFEST_STORAGE_TYPE is empty, please specify in configuration !")
 	}
 
+	argocdNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argocdNamespace == "" {
+		return nil, fmt.Errorf("ARGOCD_NAMESPACE is empty, please specify in configuration !")
+	}
+
 	argocdApiBaseUrl := os.Getenv("ARGOCD_API_BASE_URL")
 	if argocdApiBaseUrl == "" {
 		return nil, fmt.Errorf("ARGOCD_API_BASE_URL is empty, please specify in configuration !")
@@ -75,8 +87,9 @@ func newConfig() (*InterlaceConfig, error) {
 	config := &InterlaceConfig{
 		LogLevel:            logLevel,
 		ManifestStorageType: manifestStorageType,
-		ArgocdApiBaseUrl:    argocdApiBaseUrl + "/api/v1/applications",
-		ArgocdApiToken:      argocdApiToken,
+		ArgocdNamespace:     argocdNamespace,
+		ArgocdApiBaseUrl:    strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdApiToken:      strings.TrimSuffix(argocdApiToken, "\n"),
 	}
 
 	if manifestStorageType == "oci" {
@@ -113,12 +126,51 @@ func newConfig() (*InterlaceConfig, error) {
 
 	} else if manifestStorageType == "git" {
 
+		manifestAppSetMode := os.Getenv("MANIFEST_GITREPO_MODE")
+
+		if manifestAppSetMode == "" {
+			return nil, fmt.Errorf("MANIFEST_GITREPO_MODE is empty, please specify in configuration !")
+		}
+
+		config.ManifestAppSetMode = manifestAppSetMode
+
+		manifestArgocdProj := os.Getenv("MANIFEST_ARGOCD_PROJECT")
+
+		if manifestArgocdProj == "" {
+			return nil, fmt.Errorf("MANIFEST_ARGOCD_PROJECT is empty, please specify in configuration !")
+		}
+
+		config.ManifestArgocdProj = manifestArgocdProj
+
+		manifestDestNamespace := os.Getenv("MANIFEST_DEST_NAMESPACE")
+
+		if manifestDestNamespace == "" {
+			return nil, fmt.Errorf("MANIFEST_DEST_NAMESPACE is empty, please specify in configuration !")
+		}
+		config.ManifestDestNamespace = manifestDestNamespace
+
+		manifestSuffix := os.Getenv("MANIFEST_GITREPO_SUFFIX")
+
+		if manifestSuffix == "" {
+			return nil, fmt.Errorf("MANIFEST_GITREPO_SUFFIX is empty, please specify in configuration !")
+		}
+
+		config.ManifestSuffix = manifestSuffix
+
 		manifestGitUrl := os.Getenv("MANIFEST_GITREPO_URL")
 
 		if manifestGitUrl == "" {
 			return nil, fmt.Errorf("MANIFEST_GITREPO_URL is empty, please specify in configuration !")
 		}
 		config.ManifestGitUrl = manifestGitUrl
+
+		manifestGitBranch := os.Getenv("MANIFEST_GITREPO_BRANCH")
+
+		if manifestGitBranch == "" {
+			return nil, fmt.Errorf("MANIFEST_GITREPO_BRANCH is empty, please specify in configuration !")
+		}
+
+		config.ManifestGitBranch = manifestGitBranch
 
 		manifestGitUserId := os.Getenv("MANIFEST_GITREPO_USER")
 
