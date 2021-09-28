@@ -36,7 +36,7 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/in-toto/in-toto-golang/pkg/ssl"
+	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 	"github.com/theupdateframework/go-tuf/encrypted"
@@ -171,7 +171,7 @@ func generateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		return err
 	}
 
-	signer, err := ssl.NewEnvelopeSigner(&IntotoSigner{
+	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
 		priv: priv.(*ecdsa.PrivateKey),
 	})
 	if err != nil {

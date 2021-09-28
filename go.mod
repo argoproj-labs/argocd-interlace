@@ -9,6 +9,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.1 // indirect
 	github.com/google/go-containerregistry v0.5.1
 	github.com/in-toto/in-toto-golang v0.2.1-0.20210627200632-886210ae2ab9
+	github.com/secure-systems-lab/go-securesystemslib v0.1.0
 	github.com/sigstore/cosign v1.0.1
 	github.com/sigstore/k8s-manifest-sigstore v0.0.0-20210826045054-d360794618ff
 	github.com/sirupsen/logrus v1.8.1
