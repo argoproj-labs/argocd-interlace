@@ -153,13 +153,17 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 	keyPath := utils.PRIVATE_KEY_PATH
 
-	err := sign.SignManifest("", keyPath, manifestPath, signedManifestPath)
+	_, err := sign.SignManifest("", keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
 		log.Errorf("Error in signing manifest err %s", err.Error())
 		return err
 	}
 
+	return nil
+}
+
+func (s StorageBackend) StoreManifestProvenance() error {
 	newConfigFilePath := filepath.Join(s.appDirPath, utils.CONFIG_FILE_NAME)
 
 	signedManifestFilePath := filepath.Join(s.appDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
@@ -172,7 +176,6 @@ func (s StorageBackend) StoreManifestBundle() error {
 		log.Errorf("Error in retrieving files digest : %s", err.Error())
 		return err
 	}
-
 	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
 		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
 		generatedManifestFilePath, fileHash, s.buildStartedOn, s.buildFinishedOn, false)
@@ -201,6 +204,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 		log.Errorf("Error in cloning manifest repo and updating signed configmap: %s", err.Error())
 		return err
 	}
+
 	return nil
 }
 

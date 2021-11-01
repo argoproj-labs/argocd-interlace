@@ -19,31 +19,35 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type InterlaceConfig struct {
-	LogLevel              string
-	ManifestStorageType   string
-	ArgocdNamespace       string
-	ArgocdApiBaseUrl      string
-	ArgocdApiToken        string
-	OciImageRegistry      string
-	OciImagePrefix        string
-	OciImageTag           string
-	RekorServer           string
-	RekorTmpDir           string
-	ManifestAppSetMode    string
-	ManifestArgocdProj    string
-	ManifestDestNamespace string
-	ManifestSuffix        string
-	ManifestGitUrl        string
-	ManifestGitBranch     string
-	ManifestGitUserId     string
-	ManifestGitUserEmail  string
-	ManifestGitToken      string
+	LogLevel                string
+	ManifestStorageType     string
+	ArgocdNamespace         string
+	ArgocdApiBaseUrl        string
+	ArgocdApiToken          string
+	OciImageRegistry        string
+	OciImagePrefix          string
+	OciImageTag             string
+	RekorServer             string
+	RekorTmpDir             string
+	ManifestAppSetMode      string
+	ManifestArgocdProj      string
+	ManifestDestNamespace   string
+	ManifestSuffix          string
+	ManifestGitUrl          string
+	ManifestGitBranch       string
+	ManifestGitUserId       string
+	ManifestGitUserEmail    string
+	ManifestGitToken        string
+	SourceMaterialHashList  string
+	SourceMaterialSignature string
+	AlwaysGenerateProv      bool
 }
 
 var instance *InterlaceConfig
@@ -84,12 +88,34 @@ func newConfig() (*InterlaceConfig, error) {
 		return nil, fmt.Errorf("ARGOCD_TOKEN is empty, please specify in configuration !")
 	}
 
+	sourceHashList := os.Getenv("SOURCE_MATERIAL_HASH_LIST")
+
+	if sourceHashList == "" {
+		return nil, fmt.Errorf("SOURCE_MATERIAL_HASH_LIST is empty, please specify in configuration !")
+	}
+
+	sourceHashSignature := os.Getenv("SOURCE_MATERIAL_SIGNATURE")
+
+	if sourceHashSignature == "" {
+		return nil, fmt.Errorf("SOURCE_MATERIAL_SIGNATURE is empty, please specify in configuration !")
+	}
+
+	alwaysGenerateProv := os.Getenv("ALWAYS_GENERATE_PROV")
+
+	if alwaysGenerateProv == "" {
+		return nil, fmt.Errorf("ALWAYS_GENERATE_PROV is empty, please specify in configuration !")
+	}
+	alwayGenProv, _ := strconv.ParseBool(alwaysGenerateProv)
+
 	config := &InterlaceConfig{
-		LogLevel:            logLevel,
-		ManifestStorageType: manifestStorageType,
-		ArgocdNamespace:     argocdNamespace,
-		ArgocdApiBaseUrl:    strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
-		ArgocdApiToken:      strings.TrimSuffix(argocdApiToken, "\n"),
+		LogLevel:                logLevel,
+		ManifestStorageType:     manifestStorageType,
+		ArgocdNamespace:         argocdNamespace,
+		ArgocdApiBaseUrl:        strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdApiToken:          strings.TrimSuffix(argocdApiToken, "\n"),
+		SourceMaterialHashList:  sourceHashList,
+		SourceMaterialSignature: sourceHashSignature,
+		AlwaysGenerateProv:      alwayGenProv,
 	}
 
 	if manifestStorageType == "oci" {
@@ -114,6 +140,16 @@ func newConfig() (*InterlaceConfig, error) {
 		}
 		config.OciImageTag = ociImageTag
 
+		rekorServer := os.Getenv("REKOR_SERVER")
+		if rekorServer == "" {
+			return nil, fmt.Errorf("REKOR_SERVER is empty, please specify in configuration !")
+		}
+		config.RekorServer = rekorServer
+
+		config.RekorTmpDir = os.Getenv("REKORTMPDIR")
+
+		return config, nil
+	} else if manifestStorageType == "annotation" {
 		rekorServer := os.Getenv("REKOR_SERVER")
 		if rekorServer == "" {
 			return nil, fmt.Errorf("REKOR_SERVER is empty, please specify in configuration !")

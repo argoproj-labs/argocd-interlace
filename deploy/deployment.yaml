@@ -16,12 +16,12 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev339
           imagePullPolicy: Always
           command:
             - argocd-interlace
           args:
-            - --namespace=argocd
+            - --namespace=openshift-gitops
           volumeMounts:
             - name: output
               mountPath: /tmp/output
@@ -29,10 +29,15 @@ spec:
               mountPath: /etc/signing-secrets
             - name: gcr-registry-docker-config
               mountPath: /tmp/.docker/
+            - name: keyring-secret
+              mountPath: /etc/keyring-secret
       volumes:
         - name: signing-secrets
           secret:
             secretName: signing-secrets
+        - name: keyring-secret
+          secret:
+            secretName: keyring-secret
         - name: output
           emptyDir: {}
         - name: gcr-registry-docker-config

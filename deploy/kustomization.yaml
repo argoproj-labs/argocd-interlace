@@ -4,7 +4,8 @@ resources:
     - role_binding.yaml
     - deployment.yaml
     - service_account.yaml
-    - secrets.yaml
+    - policy_role.yaml
+    - policy_role_binding.yaml
 
 patchesJson6902:
 - target:

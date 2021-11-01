@@ -36,10 +36,12 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/in-toto/in-toto-golang/pkg/ssl"
+	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/pkg/cosign"
+	kustbuildutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/manifestbuild/kustomize"
 	log "github.com/sirupsen/logrus"
 	"github.com/theupdateframework/go-tuf/encrypted"
+	"github.com/tidwall/gjson"
 	"golang.org/x/term"
 )
 
@@ -64,8 +66,35 @@ func GenerateProvanance(appName, appPath,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreviousCommitSha,
 	target, targetDigest string, buildStartedOn, buildFinishedOn time.Time, uploadTLog bool) error {
 
-	//TODO
-	//TraceProvenance(appSourceRepoUrl, appSourcePreviousCommitSha, appSourceCommitSha)
+	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
+
+	manifestFile := filepath.Join(appDirPath, utils.MANIFEST_FILE_NAME)
+	recipeCmds := []string{"", ""}
+
+	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
+	log.Info("host:", host, " orgRepo:", orgRepo, " path:", path, " gitRef:", gitRef, " gitSuff:", gitSuff)
+
+	url := host + orgRepo + gitSuff
+	log.Info("url:", url)
+	r, err := GetTopGitRepo(url)
+
+	if err != nil {
+		log.Errorf("Error git clone:  %s", err.Error())
+		return err
+	}
+	log.Info("r.RootDir ", r.RootDir, "appPath ", appPath)
+	//baseDir := filepath.Join(r.RootDir, appPath) // ##CHANGEDX
+	baseDir := filepath.Join(r.RootDir, appPath)
+
+	//log.Infof("[INFO]: baseDir: %s ", baseDir)
+	prov, err := kustbuildutil.GenerateProvenance(manifestFile, "", baseDir, buildStartedOn, buildFinishedOn, recipeCmds)
+
+	if err != nil {
+		log.Infof("err in prov: %s ", err.Error())
+	}
+
+	provBytes, err := json.Marshal(prov)
+	log.Infof(": prov: %s ", string(provBytes))
 
 	subjects := []in_toto.Subject{}
 
@@ -76,12 +105,14 @@ func GenerateProvanance(appName, appPath,
 		},
 	})
 
-	materials := generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha)
+	materials := generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha, string(provBytes))
+	interlaceConfig, err := config.GetInterlaceConfig()
+	argocdNamespace := interlaceConfig.ArgocdNamespace
 
 	entryPoint := "argocd-interlace"
 	recipe := in_toto.ProvenanceRecipe{
 		EntryPoint: entryPoint,
-		Arguments:  []string{"-n argocd"},
+		Arguments:  []string{"-n " + argocdNamespace},
 	}
 
 	it := in_toto.Statement{
@@ -107,8 +138,6 @@ func GenerateProvanance(appName, appPath,
 		return err
 	}
 
-	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
-
 	err = utils.WriteToFile(string(b), appDirPath, utils.PROVENANCE_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
@@ -124,18 +153,41 @@ func GenerateProvanance(appName, appPath,
 	return nil
 }
 
-func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string) []in_toto.ProvenanceMaterial {
+func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string, provTrace string) []in_toto.ProvenanceMaterial {
 
 	materials := []in_toto.ProvenanceMaterial{}
 
 	materials = append(materials, in_toto.ProvenanceMaterial{
-		URI: appSourceRepoUrl,
+		URI: appSourceRepoUrl + ".git",
 		Digest: in_toto.DigestSet{
 			"commit":   string(appSourceCommitSha),
 			"revision": appSourceRevision,
 			"path":     appPath,
 		},
 	})
+
+	appSourceRepoUrlFul := appSourceRepoUrl + ".git"
+	materialsStr := gjson.Get(provTrace, "predicate.materials")
+
+	for _, mat := range materialsStr.Array() {
+
+		uri := gjson.Get(mat.String(), "uri").String()
+		path := gjson.Get(mat.String(), "digest.path").String()
+		revision := gjson.Get(mat.String(), "digest.revision").String()
+		commit := gjson.Get(mat.String(), "digest.commit").String()
+
+		if uri != appSourceRepoUrlFul {
+			intoMat := in_toto.ProvenanceMaterial{
+				URI: uri,
+				Digest: in_toto.DigestSet{
+					"commit":   commit,
+					"revision": revision,
+					"path":     path,
+				},
+			}
+			materials = append(materials, intoMat)
+		}
+	}
 
 	return materials
 }
@@ -171,7 +223,7 @@ func generateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		return err
 	}
 
-	signer, err := ssl.NewEnvelopeSigner(&IntotoSigner{
+	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
 		priv: priv.(*ecdsa.PrivateKey),
 	})
 	if err != nil {

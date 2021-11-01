@@ -21,7 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SignManifest(imageRef, keyPath, manifestPath, signedManifestPath string) error {
+func SignManifest(imageRef, keyPath, manifestPath, signedManifestPath string) ([]byte, error) {
 
 	so := &k8smanifest.SignOption{
 		ImageRef:         imageRef,
@@ -31,10 +31,10 @@ func SignManifest(imageRef, keyPath, manifestPath, signedManifestPath string) er
 		ImageAnnotations: nil,
 	}
 
-	_, err := k8smanifest.Sign(manifestPath, so)
+	signedBytes, err := k8smanifest.Sign(manifestPath, so)
 	if err != nil {
 		log.Errorf("Error in signing artifact: %s", err.Error())
-		return err
+		return nil, err
 	}
-	return nil
+	return signedBytes, nil
 }

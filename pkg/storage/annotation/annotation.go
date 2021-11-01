@@ -14,20 +14,19 @@
 // limitations under the License.
 //
 
-package oci
+package annotation
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
-	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/sign"
 	"github.com/IBM/argocd-interlace/pkg/utils"
-	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/ghodss/yaml"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type StorageBackend struct {
@@ -38,13 +37,12 @@ type StorageBackend struct {
 	appSourceRevision           string
 	appSourceCommitSha          string
 	appSourcePreiviousCommitSha string
-	imageRef                    string
 	buildStartedOn              time.Time
 	buildFinishedOn             time.Time
 }
 
 const (
-	StorageBackendOCI = "oci"
+	StorageBackendAnnotation = "annotation"
 )
 
 func NewStorageBackend(appName, appPath, appDirPath,
@@ -57,65 +55,94 @@ func NewStorageBackend(appName, appPath, appDirPath,
 		appSourceRevision:           appSourceRevision,
 		appSourceCommitSha:          appSourceCommitSha,
 		appSourcePreiviousCommitSha: appSourcePreiviousCommitSha,
-		imageRef:                    getImageRef(appName),
 	}, nil
 }
 
 func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
-
-	if s.imageRef == "" {
-		return nil, fmt.Errorf("Error in fetching imageRef")
-	}
-	// Check if the there is an existing bundle manifest in the storage
-	bundleYAMLBytes, err := getBundleManifest(s.imageRef)
-
-	if err != nil {
-		log.Errorf("Error in retriving bundle manifest image: %s", err.Error())
-		return nil, err
-	}
-	return bundleYAMLBytes, nil
+	return nil, nil
 }
 
 func (s StorageBackend) StoreManifestBundle() error {
-	log.Infof("Storing manifest in OCI: %s ", s.imageRef)
 
 	keyPath := utils.PRIVATE_KEY_PATH
 	manifestPath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
 	signedManifestPath := filepath.Join(s.appDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
 
-	log.Infof("[INFO][%s] Interlace pushes image of desired manifest in OCI registry:  %s: ", s.appName, s.imageRef)
-
-	_, err := sign.SignManifest(s.imageRef, keyPath, manifestPath, signedManifestPath)
+	signedBytes, err := sign.SignManifest("", keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
 		log.Errorf("Error in signing bundle image: %s", err.Error())
 		return err
 	}
 
-	imageDigest, err := getDigest(s.imageRef)
+	log.Info("signedBytes: ", string(signedBytes))
 
-	log.Infof("[INFO][%s] Pushed Image: %s", s.appName, imageDigest)
+	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
 
-	log.Infof("[INFO][%s] Interlace signes image of desired manifest in OCI registry: %s", s.appName, s.imageRef)
+	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
+
+	log.Info("manifestYAMLs[0]: ", string(manifestYAMLs[0]))
+
+	var annotations map[string]string
+	for _, item := range manifestYAMLs {
+
+		log.Info(" item ", string(item))
+
+		var obj unstructured.Unstructured
+		err := yaml.Unmarshal(item, &obj)
+		if err != nil {
+			log.Errorf("Error unmarshling: %s", err.Error())
+		}
+
+		kind := obj.GetKind()
+		log.Info("kind 2 ", kind)
+		log.Info("Before ----->>>", obj.GetKind(), obj.GetName(), obj.GetNamespace())
+
+		if kind == "Policy" {
+			annotations = k8smnfutil.GetAnnotationsInYAML(item)
+
+			log.Info("annotations ", annotations)
+
+			log.Info("annotations.message ", annotations["cosign.sigstore.dev/message"])
+
+			log.Info("annotations.signature ", annotations["cosign.sigstore.dev/signature"])
+
+			utils.ApplyPatch(obj, annotations)
+
+			log.Infof("[INFO][%s] Interlace attaches signature to policy as annotation:", s.appName)
+
+			break
+		}
+
+	}
 
 	if err != nil {
 		log.Errorf("Error in getting digest: %s ", err.Error())
+		return err
+	}
+	return nil
+}
+
+func (s StorageBackend) StoreManifestProvenance() error {
+	err := provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
+		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
+		"", "", s.buildStartedOn, s.buildFinishedOn, true)
+	if err != nil {
+		log.Errorf("Error in storing provenance: %s", err.Error())
 		return err
 	}
 
 	return nil
 }
 
-func (s StorageBackend) StoreManifestProvenance() error {
-	imageDigest, err := getDigest(s.imageRef)
-	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
-		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
-		s.imageRef, imageDigest, s.buildStartedOn, s.buildFinishedOn, true)
+func GetKindInYAML(yamlBytes []byte) string {
+
+	var obj unstructured.Unstructured
+	err := yaml.Unmarshal(yamlBytes, &obj)
 	if err != nil {
-		log.Errorf("Error in storing provenance: %s", err.Error())
-		return err
+		return ""
 	}
-	return nil
+	return obj.GetKind()
 }
 
 func (s StorageBackend) SetBuildStartedOn(buildStartedOn time.Time) error {
@@ -129,53 +156,5 @@ func (s StorageBackend) SetBuildFinishedOn(buildFinishedOn time.Time) error {
 }
 
 func (b *StorageBackend) Type() string {
-	return StorageBackendOCI
-}
-
-func getBundleManifest(imageRef string) ([]byte, error) {
-
-	image, err := k8smnfutil.PullImage(imageRef)
-
-	if err != nil {
-		log.Infof("Error in pulling image err %s", err.Error())
-		return nil, err
-	}
-
-	concatYAMLbytes, err := k8smnfutil.GenerateConcatYAMLsFromImage(image)
-	if err != nil {
-		log.Infof("Error in GenerateConcatYAMLsFromImage err %s", err.Error())
-		return nil, err
-	}
-	return concatYAMLbytes, nil
-}
-
-func getImageRef(appName string) string {
-
-	interlaceConfig, err := config.GetInterlaceConfig()
-	if err != nil {
-		log.Errorf("Error in loading config: %s", err.Error())
-		return ""
-	}
-
-	imageRegistry := interlaceConfig.OciImageRegistry
-
-	imagePrefix := interlaceConfig.OciImagePrefix
-
-	imageTag := interlaceConfig.OciImageTag
-
-	imageName := fmt.Sprintf("%s-%s", imagePrefix, appName)
-
-	imageRef := fmt.Sprintf("%s/%s:%s", imageRegistry, imageName, imageTag)
-
-	return imageRef
-
-}
-
-func getDigest(src string) (string, error) {
-
-	digest, err := crane.Digest(src)
-	if err != nil {
-		return "", fmt.Errorf("fetching digest %s: %v", src, err)
-	}
-	return digest, nil
+	return StorageBackendAnnotation
 }

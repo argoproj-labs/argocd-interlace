@@ -16,32 +16,25 @@
 package provenance
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 
-	"github.com/tidwall/gjson"
-
+	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/pkg/errors"
 	k8sutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
-
-func TraceProvenance(repoUrl, previousCommitSha, currentCommitSha string) {
-
-	gitToken := GetRepoCredentials(repoUrl)
-
-	orgName, repoName := getRepoInfo(repoUrl)
-
-	getDiff(previousCommitSha, currentCommitSha, orgName, repoName, gitToken)
-
-	// generate dif for top repo (current vs remote)
-	// get list of remote base repo + commits (current vs remote)
-
-}
 
 func GitLatestCommitSha(repoUrl string, branch string) string {
 
@@ -66,38 +59,24 @@ func GitLatestCommitSha(repoUrl string, branch string) string {
 
 func getRepoInfo(repoUrl string) (string, string) {
 	tokens := strings.Split(strings.TrimSuffix(repoUrl, "/"), "/")
-
-	orgName := tokens[3]
-	repoName := tokens[4]
+	orgName := ""
+	repoName := ""
+	if len(tokens) == 5 {
+		orgName = tokens[3]
+		repoName = tokens[4]
+	} else if len(tokens) == 4 {
+		orgName = tokens[2]
+		repoName = tokens[3]
+	}
 
 	log.Info(orgName)
 	log.Info(repoName)
 	return orgName, repoName
 }
-func getDiff(previousCommitSha, currentCommitSha, orgName, repoName, gitToken string) {
-
-	log.Info("Getting diff between two commits")
-
-	desiredUrl := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s",
-		orgName, repoName, previousCommitSha, currentCommitSha)
-
-	response, err := utils.QueryAPI(desiredUrl, "GET", gitToken, nil)
-
-	if err != nil {
-		log.Errorf("Error occured while query github %s ", err.Error())
-	}
-
-	files := gjson.Get(response, "files")
-
-	for _, item := range files.Array() {
-
-		filename := gjson.Get(item.String(), "filename").String()
-		sha := gjson.Get(item.String(), "sha").String()
-		log.Info("filename ", filename, "  sha ", sha)
-	}
-}
 
 func GetRepoCredentials(repoUrl string) string {
+
+	interlaceConfig, err := config.GetInterlaceConfig()
 
 	_, cfg, err := utils.GetClient("")
 
@@ -110,7 +89,7 @@ func GetRepoCredentials(repoUrl string) string {
 
 	apiVersion := "v1"
 	kind := "ConfigMap"
-	namespace := "argocd"
+	namespace := interlaceConfig.ArgocdNamespace
 	name := "argocd-cm"
 
 	argoConfigMapObj, err := k8sutil.GetResource(apiVersion, kind, namespace, name)
@@ -180,4 +159,222 @@ func getConfiMapFromObj(obj *unstructured.Unstructured) (*corev1.ConfigMap, erro
 	}
 
 	return &cm, nil
+}
+
+const gitCmd = "git"
+
+type GitRepoResult struct {
+	RootDir  string
+	URL      string
+	Revision string
+	CommitID string
+	Path     string
+}
+type ConfirmedDir string
+
+func (d ConfirmedDir) HasPrefix(path ConfirmedDir) bool {
+	if path.String() == string(filepath.Separator) || path == d {
+		return true
+	}
+	return strings.HasPrefix(
+		string(d),
+		string(path)+string(filepath.Separator))
+}
+
+func (d ConfirmedDir) Join(path string) string {
+	return filepath.Join(string(d), path)
+}
+
+func (d ConfirmedDir) String() string {
+	return string(d)
+}
+
+func NewTmpConfirmedDir() (ConfirmedDir, error) {
+	n, err := ioutil.TempDir("", "kustomize-")
+	if err != nil {
+		return "", err
+	}
+
+	// In MacOs `ioutil.TempDir` creates a directory
+	// with root in the `/var` folder, which is in turn
+	// a symlinked path to `/private/var`.
+	// Function `filepath.EvalSymlinks`is used to
+	// resolve the real absolute path.
+	deLinked, err := filepath.EvalSymlinks(n)
+	return ConfirmedDir(deLinked), err
+}
+
+func GetTopGitRepo(url string) (*GitRepoResult, error) {
+
+	log.Infof("GetTopGitRepo url : %s ", url)
+
+	r := &GitRepoResult{}
+	r.URL = url
+
+	cDir, err := NewTmpConfirmedDir()
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo NewTmpConfirmedDir : %s ", err.Error())
+		return nil, err
+	}
+
+	r.RootDir = cDir.String()
+
+	_, err = CmdExec(gitCmd, r.RootDir, "init")
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo  CmdExec init : %s ", err.Error())
+		return nil, err
+	}
+	_, err = CmdExec(gitCmd, r.RootDir, "remote", "add", "origin", r.URL)
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo CmdExec add : %s ", err.Error())
+		return nil, err
+	}
+	rev := "HEAD"
+
+	_, err = CmdExec(gitCmd, r.RootDir, "fetch", "--depth=1", "origin", rev)
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo CmdExec fetch : %s ", err.Error())
+		return nil, err
+	}
+	_, err = CmdExec(gitCmd, r.RootDir, "checkout", "FETCH_HEAD")
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo CmdExec checkout : %s ", err.Error())
+		return nil, err
+	}
+
+	commitGetOut, err := CmdExec(gitCmd, r.RootDir, "rev-parse", "FETCH_HEAD")
+	if err != nil {
+		log.Infof("[INFO]: GetTopGitRepo CmdExec rev-parse : %s ", err.Error())
+		return nil, err
+	}
+	r.CommitID = strings.TrimSuffix(commitGetOut, "\n")
+	return r, nil
+}
+
+const (
+	refQueryRegex = "\\?(version|ref)="
+	gitSuffix     = ".git"
+	gitDelimiter  = "_git/"
+)
+
+func ParseGitUrl(n string) (
+	host string, orgRepo string, path string, gitRef string, gitSuff string) {
+
+	if strings.Contains(n, gitDelimiter) {
+		index := strings.Index(n, gitDelimiter)
+		// Adding _git/ to host
+		host = normalizeGitHostSpec(n[:index+len(gitDelimiter)])
+		orgRepo = strings.Split(strings.Split(n[index+len(gitDelimiter):], "/")[0], "?")[0]
+		path, gitRef = peelQuery(n[index+len(gitDelimiter)+len(orgRepo):])
+		return
+	}
+	host, n = parseHostSpec(n)
+	gitSuff = gitSuffix
+	if strings.Contains(n, gitSuffix) {
+		index := strings.Index(n, gitSuffix)
+		orgRepo = n[0:index]
+		n = n[index+len(gitSuffix):]
+		path, gitRef = peelQuery(n)
+		return
+	}
+
+	i := strings.Index(n, "/")
+	if i < 1 {
+		return "", "", "", "", ""
+	}
+	j := strings.Index(n[i+1:], "/")
+	if j >= 0 {
+		j += i + 1
+		orgRepo = n[:j]
+		path, gitRef = peelQuery(n[j+1:])
+		return
+	}
+	path = ""
+	orgRepo, gitRef = peelQuery(n)
+	return host, orgRepo, path, gitRef, gitSuff
+}
+
+func parseHostSpec(n string) (string, string) {
+	var host string
+	// Start accumulating the host part.
+	for _, p := range []string{
+		// Order matters here.
+		"git::", "gh:", "ssh://", "https://", "http://",
+		"git@", "github.com:", "github.com/"} {
+		if len(p) < len(n) && strings.ToLower(n[:len(p)]) == p {
+			n = n[len(p):]
+			host += p
+		}
+	}
+	if host == "git@" {
+		i := strings.Index(n, "/")
+		if i > -1 {
+			host += n[:i+1]
+			n = n[i+1:]
+		} else {
+			i = strings.Index(n, ":")
+			if i > -1 {
+				host += n[:i+1]
+				n = n[i+1:]
+			}
+		}
+		return host, n
+	}
+
+	// If host is a http(s) or ssh URL, grab the domain part.
+	for _, p := range []string{
+		"ssh://", "https://", "http://"} {
+		if strings.HasSuffix(host, p) {
+			i := strings.Index(n, "/")
+			if i > -1 {
+				host = host + n[0:i+1]
+				n = n[i+1:]
+			}
+			break
+		}
+	}
+
+	return normalizeGitHostSpec(host), n
+}
+func normalizeGitHostSpec(host string) string {
+	s := strings.ToLower(host)
+	if strings.Contains(s, "github.com") {
+		if strings.Contains(s, "git@") || strings.Contains(s, "ssh:") {
+			host = "git@github.com:"
+		} else {
+			host = "https://github.com/"
+		}
+	}
+	if strings.HasPrefix(s, "git::") {
+		host = strings.TrimPrefix(s, "git::")
+	}
+	return host
+}
+
+func peelQuery(arg string) (string, string) {
+
+	r, _ := regexp.Compile(refQueryRegex)
+	j := r.FindStringIndex(arg)
+
+	if len(j) > 0 {
+		return arg[:j[0]], arg[j[0]+len(r.FindString(arg)):]
+	}
+	return arg, ""
+}
+
+func CmdExec(baseCmd, dir string, args ...string) (string, error) {
+	cmd := exec.Command(baseCmd, args...)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	err := cmd.Run()
+	if err != nil {
+		return "", errors.Wrap(err, stderr.String())
+	}
+	out := stdout.String()
+	return out, nil
 }

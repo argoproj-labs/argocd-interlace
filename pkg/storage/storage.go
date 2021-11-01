@@ -19,6 +19,7 @@ package storage
 import (
 	"time"
 
+	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 	"github.com/IBM/argocd-interlace/pkg/storage/git"
 	"github.com/IBM/argocd-interlace/pkg/storage/oci"
 )
@@ -26,6 +27,7 @@ import (
 type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
 	StoreManifestBundle() error
+	StoreManifestProvenance() error
 	SetBuildStartedOn(buildStartedOn time.Time) error
 	SetBuildFinishedOn(buildFinishedOn time.Time) error
 	Type() string
@@ -35,7 +37,7 @@ func InitializeStorageBackends(appName, appPath, appDirPath, clusterUrl,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
 	manifestStorageType, clusterName string) (map[string]StorageBackend, error) {
 
-	configuredStorageBackends := []string{git.StorageBackendGit, oci.StorageBackendOCI}
+	configuredStorageBackends := []string{git.StorageBackendGit, oci.StorageBackendOCI, annotation.StorageBackendAnnotation}
 
 	storageBackends := map[string]StorageBackend{}
 	for _, backendType := range configuredStorageBackends {
@@ -49,6 +51,14 @@ func InitializeStorageBackends(appName, appPath, appDirPath, clusterUrl,
 					return nil, err
 				}
 				storageBackends[backendType] = ociStorageBackend
+			case annotation.StorageBackendAnnotation:
+
+				annotationStorageBackend, err := annotation.NewStorageBackend(appName, appPath, appDirPath,
+					appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha)
+				if err != nil {
+					return nil, err
+				}
+				storageBackends[backendType] = annotationStorageBackend
 
 			case git.StorageBackendGit:
 
