@@ -172,8 +172,6 @@ func verifySourceMaterial(appPath, appSourceRepoUrl string) (bool, error) {
 
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	log.Info(" baseDir: ", baseDir)
-
 	keyPath := "/etc/keyring-secret/pubring.gpg"
 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
@@ -181,15 +179,11 @@ func verifySourceMaterial(appPath, appSourceRepoUrl string) (bool, error) {
 
 	verification_target, err := os.Open(srcMatPath)
 	signature, err := os.Open(srcMatSigPath)
-	flag, message, _, _, _ := verifySignature(keyPath, verification_target, signature)
-
-	log.Info("flag:", flag)
-	log.Info("message:", message)
+	flag, _, _, _, _ := verifySignature(keyPath, verification_target, signature)
 
 	hashCompareSuccess := false
 	if flag {
 		hashCompareSuccess, err = compareHash(srcMatPath, baseDir)
-		log.Info("hashCompareSuccess:", hashCompareSuccess)
 		if err != nil {
 			return hashCompareSuccess, err
 		}
@@ -204,8 +198,6 @@ func verifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, 
 	if keyRing, err := LoadKeyRing(keyPath); err != nil {
 		return false, "Error when loading key ring", nil, nil, err
 	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig); signer == nil {
-		log.Info("msg:", msg)
-		log.Info("sig:", sig)
 		if err != nil {
 			log.Error("Signature verification error:", err.Error())
 		}
@@ -310,9 +302,8 @@ func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 
 	for scanner.Scan() {
 		l := scanner.Text()
-		log.Info("scaned text ", l)
+
 		data := strings.Split(l, " ")
-		fmt.Println(" data ", data, " len(data): ", len(data))
 		if len(data) > 2 {
 			hash := data[0]
 			path := data[2]
@@ -371,7 +362,6 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 		return nil
 	}
 
-	//tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "https://"), "https://")
 	tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "."), ".")
 	clusterName := tokens[1]
 
