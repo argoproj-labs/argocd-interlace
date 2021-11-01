@@ -65,7 +65,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: argocd-interlace-controller-tenant-access
-  namespace: openshift-gitops
+  namespace: argocd
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -161,7 +161,7 @@ spec:
     spec:
       containers:
       - args:
-        - --namespace=openshift-gitops
+        - --namespace=argocd
         command:
         - argocd-interlace
         env:

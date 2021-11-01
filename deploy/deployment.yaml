@@ -16,12 +16,12 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev339
+          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
           imagePullPolicy: Always
           command:
             - argocd-interlace
           args:
-            - --namespace=openshift-gitops
+            - --namespace=argocd
           volumeMounts:
             - name: output
               mountPath: /tmp/output

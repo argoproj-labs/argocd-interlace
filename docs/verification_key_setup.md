@@ -1,5 +1,3 @@
-## Setting up Verification Key
-
 ## Signing and Verification Key Setup
 ArgoCD Interlace requires a key pair (signing and verification keys) for verifying integrity of source materials used for generating manifest. ArgoCD Interlace PGP key for signing source materials. A secret resource (keyring-secret) which contains public key should be setup in a cluster for enabling signature verification by ArgoCD Interlace. 
 
