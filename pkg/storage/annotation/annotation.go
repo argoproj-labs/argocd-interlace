@@ -79,14 +79,8 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
 
-	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
-
-	log.Info("manifestYAMLs[0]: ", string(manifestYAMLs[0]))
-
 	var annotations map[string]string
 	for _, item := range manifestYAMLs {
-
-		log.Info(" item ", string(item))
 
 		var obj unstructured.Unstructured
 		err := yaml.Unmarshal(item, &obj)
@@ -95,7 +89,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 		}
 
 		kind := obj.GetKind()
-		log.Info("kind 2 ", kind)
+
 		log.Info("Before ----->>>", obj.GetKind(), obj.GetName(), obj.GetNamespace())
 
 		if kind == "Policy" {
@@ -107,7 +101,9 @@ func (s StorageBackend) StoreManifestBundle() error {
 
 			log.Info("annotations.signature ", annotations["cosign.sigstore.dev/signature"])
 
-			utils.ApplyPatch(obj, annotations)
+			name := obj.GetName()
+			namespace := obj.GetNamespace()
+			utils.ApplyPatch(name, namespace, obj, annotations)
 
 			log.Infof("[INFO][%s] Interlace attaches signature to policy as annotation:", s.appName)
 

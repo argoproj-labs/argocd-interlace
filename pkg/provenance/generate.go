@@ -83,10 +83,9 @@ func GenerateProvanance(appName, appPath,
 		return err
 	}
 	log.Info("r.RootDir ", r.RootDir, "appPath ", appPath)
-	//baseDir := filepath.Join(r.RootDir, appPath) // ##CHANGEDX
+
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	//log.Infof("[INFO]: baseDir: %s ", baseDir)
 	prov, err := kustbuildutil.GenerateProvenance(manifestFile, "", baseDir, buildStartedOn, buildFinishedOn, recipeCmds)
 
 	if err != nil {

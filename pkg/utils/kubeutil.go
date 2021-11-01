@@ -82,21 +82,8 @@ func GetKubeConfig() (*rest.Config, error) {
 	return config, nil
 }
 
-func ApplyPatch(policyObj unstructured.Unstructured, annotations map[string]string) error {
+func ApplyPatch(name, namespace string, policyObj unstructured.Unstructured, annotations map[string]string) error {
 
-	ctx := context.Background()
-	cli, err := getClient()
-
-	err = patchApply(ctx, cli, policyObj, annotations)
-	if err != nil {
-		fmt.Println(err)
-		log.Info("Error in patcing annotation")
-	}
-
-	return nil
-}
-
-func patchApply(ctx context.Context, cli client.Client, policyObj unstructured.Unstructured, annotations map[string]string) error {
 	config, err := GetKubeConfig()
 	gvr := schema.GroupVersionResource{
 		Group:    "policy.open-cluster-management.io",
@@ -112,9 +99,6 @@ func patchApply(ctx context.Context, cli client.Client, policyObj unstructured.U
 	if err != nil {
 		return fmt.Errorf("Error in creating DynamicClient; %s", err.Error())
 	}
-
-	namespace := "policy-generator-blog"
-	name := "policy-generator-blog-app"
 
 	resource, err := dyClient.Resource(gvr).Namespace(namespace).Get(context.Background(), name, metav1.GetOptions{})
 

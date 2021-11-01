@@ -166,7 +166,7 @@ func verifySourceMaterial(appPath, appSourceRepoUrl string) (bool, error) {
 
 	r, err := provenance.GetTopGitRepo(url)
 	if err != nil {
-		log.Errorf("Error git clone:  %s", err.Error()) // ##CHANGEDX
+		log.Errorf("Error git clone:  %s", err.Error())
 		return false, err
 	}
 
