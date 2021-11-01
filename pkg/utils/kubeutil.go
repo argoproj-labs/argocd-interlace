@@ -20,38 +20,15 @@ import (
 	"context"
 	"fmt"
 
-	policiesv1 "github.com/open-cluster-management/governance-policy-propagator/api/v1"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var cfg *rest.Config
-
-func getClient() (client.Client, error) {
-	cfg, err := GetKubeConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	scm := runtime.NewScheme()
-	err = scheme.AddToScheme(scm)
-	policiesv1.AddToScheme(scm)
-	if err != nil {
-		return nil, err
-	}
-	cli, err := client.New(cfg, client.Options{Scheme: scm})
-	if err != nil {
-		return nil, err
-	}
-	return cli, nil
-}
 
 func GetInClusterConfig() (*rest.Config, error) {
 	config, err := rest.InClusterConfig()

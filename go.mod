@@ -30,7 +30,6 @@ require (
 	k8s.io/component-base v0.21.3 // indirect
 	k8s.io/kube-aggregator v0.21.3 // indirect
 	k8s.io/kubectl v0.21.3 // indirect
-	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
 	sigs.k8s.io/controller-runtime v0.9.2
 	sigs.k8s.io/yaml v1.2.0
 )
@@ -66,6 +65,5 @@ replace (
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.21.2
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.21.2
 	k8s.io/sample-controller => k8s.io/sample-controller v0.21.2
-//sigs.k8s.io/kustomize/api => sigs.k8s.io/kustomize/api v0.8.10
 
 )
