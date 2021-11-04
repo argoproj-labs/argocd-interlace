@@ -4,7 +4,7 @@
     - name: DOCKER_CONFIG
       value: /tmp/.docker/
     - name: MANIFEST_STORAGE_TYPE
-      value: annotation #oci #/git/oci
+      value:  annotation #oci #  #/git/oci
     - name: OCI_IMAGE_REGISTRY
       value: gcr.io/<some-registry-name>
     - name: OCI_IMAGE_PREFIX
@@ -82,3 +82,8 @@
         secretKeyRef:
           name: argocd-token-secret
           key: ARGOCD_TOKEN
+    - name: ARGOCD_PWD
+      valueFrom:
+        secretKeyRef:
+          name: argocd-token-secret
+          key: ARGOCD_PWD

@@ -14,6 +14,3 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list"]
-  - apiGroups: ["policy.open-cluster-management.io"]
-    resources: ["policies"]
-    verbs: ["get", "list","update", "patch"]

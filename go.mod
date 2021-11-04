@@ -4,13 +4,15 @@ go 1.16
 
 require (
 	github.com/argoproj/argo-cd/v2 v2.1.3
+	github.com/evanphx/json-patch v4.11.0+incompatible
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-redis/redis/v8 v8.11.1 // indirect
 	github.com/google/go-containerregistry v0.5.1
 	github.com/in-toto/in-toto-golang v0.2.1-0.20210627200632-886210ae2ab9
-	github.com/open-cluster-management/governance-policy-propagator v0.0.0-20211012174109-95c3b77cce09
+	github.com/kisielk/godepgraph v0.0.0-20190626013829-57a7e4a651a9 // indirect
+	github.com/mattbaird/jsonpatch v0.0.0-20200820163806-098863c1fc24
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.1.0
 	github.com/sigstore/cosign v1.0.1
@@ -30,7 +32,7 @@ require (
 	k8s.io/component-base v0.21.3 // indirect
 	k8s.io/kube-aggregator v0.21.3 // indirect
 	k8s.io/kubectl v0.21.3 // indirect
-	sigs.k8s.io/controller-runtime v0.9.2
+	sigs.k8s.io/controller-runtime v0.9.2 // indirect
 	sigs.k8s.io/yaml v1.2.0
 )
 

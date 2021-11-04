@@ -1,4 +1,5 @@
-NAME=gcr.io/kg-image-registry/argocd-interlace-controller
+NAME=quay.io/gajananan/argocd-interlace-controller
+
 VERSION=dev
 TMP_DIR=/tmp/
 

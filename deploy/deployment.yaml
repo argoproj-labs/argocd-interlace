@@ -16,7 +16,7 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+          image: quay.io/gajananan/argocd-interlace-controller:dev
           imagePullPolicy: Always
           command:
             - argocd-interlace

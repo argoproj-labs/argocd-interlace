@@ -16,19 +16,16 @@
 package provenance
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/utils"
-	"github.com/pkg/errors"
 	k8sutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -219,30 +216,30 @@ func GetTopGitRepo(url string) (*GitRepoResult, error) {
 
 	r.RootDir = cDir.String()
 
-	_, err = CmdExec(gitCmd, r.RootDir, "init")
+	_, err = utils.CmdExec(gitCmd, r.RootDir, "init")
 	if err != nil {
 		log.Infof("[INFO]: GetTopGitRepo  CmdExec init : %s ", err.Error())
 		return nil, err
 	}
-	_, err = CmdExec(gitCmd, r.RootDir, "remote", "add", "origin", r.URL)
+	_, err = utils.CmdExec(gitCmd, r.RootDir, "remote", "add", "origin", r.URL)
 	if err != nil {
 		log.Infof("[INFO]: GetTopGitRepo CmdExec add : %s ", err.Error())
 		return nil, err
 	}
 	rev := "HEAD"
 
-	_, err = CmdExec(gitCmd, r.RootDir, "fetch", "--depth=1", "origin", rev)
+	_, err = utils.CmdExec(gitCmd, r.RootDir, "fetch", "--depth=1", "origin", rev)
 	if err != nil {
 		log.Infof("[INFO]: GetTopGitRepo CmdExec fetch : %s ", err.Error())
 		return nil, err
 	}
-	_, err = CmdExec(gitCmd, r.RootDir, "checkout", "FETCH_HEAD")
+	_, err = utils.CmdExec(gitCmd, r.RootDir, "checkout", "FETCH_HEAD")
 	if err != nil {
 		log.Infof("[INFO]: GetTopGitRepo CmdExec checkout : %s ", err.Error())
 		return nil, err
 	}
 
-	commitGetOut, err := CmdExec(gitCmd, r.RootDir, "rev-parse", "FETCH_HEAD")
+	commitGetOut, err := utils.CmdExec(gitCmd, r.RootDir, "rev-parse", "FETCH_HEAD")
 	if err != nil {
 		log.Infof("[INFO]: GetTopGitRepo CmdExec rev-parse : %s ", err.Error())
 		return nil, err
@@ -360,21 +357,4 @@ func peelQuery(arg string) (string, string) {
 		return arg[:j[0]], arg[j[0]+len(r.FindString(arg)):]
 	}
 	return arg, ""
-}
-
-func CmdExec(baseCmd, dir string, args ...string) (string, error) {
-	cmd := exec.Command(baseCmd, args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	err := cmd.Run()
-	if err != nil {
-		return "", errors.Wrap(err, stderr.String())
-	}
-	out := stdout.String()
-	return out, nil
 }

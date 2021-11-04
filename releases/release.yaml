@@ -12,21 +12,6 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: argocd-interlace-controller-policy-access
-rules:
-- apiGroups:
-  - policy.open-cluster-management.io
-  resources:
-  - policies
-  verbs:
-  - get
-  - list
-  - update
-  - patch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
   name: argocd-interlace-controller-tenant-access
 rules:
 - apiGroups:
@@ -51,15 +36,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - policy.open-cluster-management.io
-  resources:
-  - policies
-  verbs:
-  - get
-  - list
-  - update
-  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -70,20 +46,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: argocd-interlace-controller-tenant-access
-subjects:
-- kind: ServiceAccount
-  name: argocd-interlace-controller
-  namespace: argocd-interlace
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: argocd-interlace-controller-policy-access
-  namespace: policy-generator-blog
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: argocd-interlace-controller-policy-access
 subjects:
 - kind: ServiceAccount
   name: argocd-interlace-controller
@@ -112,6 +74,7 @@ data:
   ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
   ARGOCD_NAMESPACE: YXJnb2NkCg==
   ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
+  ARGOCD_PWD: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
   name: argocd-token-secret
@@ -246,7 +209,12 @@ spec:
             secretKeyRef:
               key: ARGOCD_TOKEN
               name: argocd-token-secret
-        image: gcr.io/<some-registry-name>/argocd-interlace-controller:dev
+        - name: ARGOCD_PWD
+          valueFrom:
+            secretKeyRef:
+              key: ARGOCD_PWD
+              name: argocd-token-secret
+        image: gcr.io/<some-image-registry>/argocd-interlace-controller:dev
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:

@@ -30,7 +30,9 @@ type InterlaceConfig struct {
 	ManifestStorageType     string
 	ArgocdNamespace         string
 	ArgocdApiBaseUrl        string
+	ArgocdServer            string
 	ArgocdApiToken          string
+	ArgocdPwd               string
 	OciImageRegistry        string
 	OciImagePrefix          string
 	OciImageTag             string
@@ -83,9 +85,15 @@ func newConfig() (*InterlaceConfig, error) {
 		return nil, fmt.Errorf("ARGOCD_API_BASE_URL is empty, please specify in configuration !")
 	}
 
+	argocdServer := strings.ReplaceAll(argocdApiBaseUrl, "https://", "")
+
 	argocdApiToken := os.Getenv("ARGOCD_TOKEN")
 	if argocdApiToken == "" {
 		return nil, fmt.Errorf("ARGOCD_TOKEN is empty, please specify in configuration !")
+	}
+	argocdPwd := os.Getenv("ARGOCD_PWD")
+	if argocdPwd == "" {
+		return nil, fmt.Errorf("ARGOCD_PWD is empty, please specify in configuration !")
 	}
 
 	sourceHashList := os.Getenv("SOURCE_MATERIAL_HASH_LIST")
@@ -112,7 +120,9 @@ func newConfig() (*InterlaceConfig, error) {
 		ManifestStorageType:     manifestStorageType,
 		ArgocdNamespace:         argocdNamespace,
 		ArgocdApiBaseUrl:        strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdServer:            strings.TrimSuffix(argocdServer, "\n"),
 		ArgocdApiToken:          strings.TrimSuffix(argocdApiToken, "\n"),
+		ArgocdPwd:               strings.TrimSuffix(argocdPwd, "\n"),
 		SourceMaterialHashList:  sourceHashList,
 		SourceMaterialSignature: sourceHashSignature,
 		AlwaysGenerateProv:      alwayGenProv,

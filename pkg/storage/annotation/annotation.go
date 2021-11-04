@@ -78,7 +78,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 	log.Info("signedBytes: ", string(signedBytes))
 
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
-
+	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
 	var annotations map[string]string
 	for _, item := range manifestYAMLs {
 
@@ -89,26 +89,26 @@ func (s StorageBackend) StoreManifestBundle() error {
 		}
 
 		kind := obj.GetKind()
+		resourceName := obj.GetName()
+		namespace := obj.GetNamespace()
 
-		log.Info("Before ----->>>", obj.GetKind(), obj.GetName(), obj.GetNamespace())
+		log.Info("Going to patch kind:", kind, " name:", obj.GetName(), " in namespace:", obj.GetNamespace())
 
-		if kind == "Policy" {
-			annotations = k8smnfutil.GetAnnotationsInYAML(item)
+		annotations = k8smnfutil.GetAnnotationsInYAML(item)
+		message := annotations["cosign.sigstore.dev/message"]
+		signature := annotations["cosign.sigstore.dev/signature"]
 
-			log.Info("annotations ", annotations)
+		log.Info("message: ", message)
+		log.Info("signature: ", signature)
 
-			log.Info("annotations.message ", annotations["cosign.sigstore.dev/message"])
+		err = utils.ApplyArgoPatch(kind, resourceName, namespace, s.appName, message, signature)
 
-			log.Info("annotations.signature ", annotations["cosign.sigstore.dev/signature"])
-
-			name := obj.GetName()
-			namespace := obj.GetNamespace()
-			utils.ApplyPatch(name, namespace, obj, annotations)
-
-			log.Infof("[INFO][%s] Interlace attaches signature to policy as annotation:", s.appName)
-
-			break
+		if err != nil {
+			log.Errorf("Error in patching application resource config: %s", err.Error())
+			return nil
 		}
+
+		log.Infof("[INFO][%s] Interlace attaches signature to policy as annotation:", s.appName)
 
 	}
 

@@ -26,9 +26,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -191,4 +193,21 @@ func Sha256Hash(filePath string) (string, error) {
 		return hash, nil
 	}
 	return "", fmt.Errorf("File not found ")
+}
+
+func CmdExec(baseCmd, dir string, args ...string) (string, error) {
+	cmd := exec.Command(baseCmd, args...)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	err := cmd.Run()
+	if err != nil {
+		return "", errors.Wrap(err, stderr.String())
+	}
+	out := stdout.String()
+	return out, nil
 }
