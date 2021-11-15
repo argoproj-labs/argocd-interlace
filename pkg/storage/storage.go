@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
-	"github.com/IBM/argocd-interlace/pkg/storage/oci"
 )
 
 type StorageBackend interface {
@@ -32,22 +31,15 @@ type StorageBackend interface {
 
 func InitializeStorageBackends(appName, appPath, appDirPath, clusterUrl,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-	manifestStorageType, clusterName string) (map[string]StorageBackend, error) {
+	manifestStorageType string) (map[string]StorageBackend, error) {
 
-	configuredStorageBackends := []string{oci.StorageBackendOCI, annotation.StorageBackendAnnotation}
+	configuredStorageBackends := []string{annotation.StorageBackendAnnotation}
 
 	storageBackends := map[string]StorageBackend{}
 	for _, backendType := range configuredStorageBackends {
 		if manifestStorageType == backendType {
 			switch backendType {
-			case oci.StorageBackendOCI:
 
-				ociStorageBackend, err := oci.NewStorageBackend(appName, appPath, appDirPath,
-					appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha)
-				if err != nil {
-					return nil, err
-				}
-				storageBackends[backendType] = ociStorageBackend
 			case annotation.StorageBackendAnnotation:
 
 				annotationStorageBackend, err := annotation.NewStorageBackend(appName, appPath, appDirPath,

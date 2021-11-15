@@ -42,7 +42,7 @@ func ApplyResourcePatch(kind, resourceName, namespace, appName string, patches [
 	})
 
 	if result == true {
-		log.Info("result ->>> ", result)
+		log.Info("result:", result)
 		log.Info("Patching completed")
 	}
 	return nil

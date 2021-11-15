@@ -99,20 +99,14 @@ spec:
     spec:
       containers:
       - args:
-        - --namespace=openshift-gitops
+        - --namespace=argocd
         command:
         - argocd-interlace
         env:
         - name: DOCKER_CONFIG
           value: /tmp/.docker/
         - name: MANIFEST_STORAGE_TYPE
-          value: oci
-        - name: OCI_IMAGE_REGISTRY
-          value: gcr.io/<some-registry-name>
-        - name: OCI_IMAGE_PREFIX
-          value: argocd.apps
-        - name: OCI_IMAGE_TAG
-          value: mnf
+          value: annotation
         - name: REKOR_SERVER
           value: https://rekor.sigstore.dev
         - name: SOURCE_MATERIAL_SIGNATURE

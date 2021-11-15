@@ -89,7 +89,7 @@ func CreateEventHandler(app *appv1.Application) error {
 // Retrive latest manifest via ArgoCD api
 // Sign manifest
 // Generate provenance record
-// Store signed manifest, provenance record in OCI registry/Git
+// Store signed manifest, provenance record in annotation
 func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 
 	generateManifest := false
@@ -355,16 +355,8 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 
 	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
 
-	tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "."), ".")
-	clusterName := ""
-	if tokens[1] == "default" {
-		clusterName = "in-cluster"
-	} else {
-		clusterName = tokens[1]
-	}
-
 	allStorageBackEnds, err := storage.InitializeStorageBackends(appName, appPath, appDirPath, appClusterUrl,
-		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, manifestStorageType, clusterName,
+		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, manifestStorageType,
 	)
 
 	if err != nil {
@@ -382,7 +374,7 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 		loc, _ := time.LoadLocation("UTC")
 		buildStartedOn := time.Now().In(loc)
 
-		log.Info(">>>>> buildStartedOn:", buildStartedOn, " loc ", loc)
+		log.Info("buildStartedOn:", buildStartedOn, " loc ", loc)
 
 		if created {
 			log.Info("created scenario")
@@ -432,7 +424,7 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 
 		buildFinishedOn := time.Now().In(loc)
 
-		log.Info(">>>>> buildFinishedOn:", buildFinishedOn, " loc ", loc)
+		log.Info("buildFinishedOn:", buildFinishedOn, " loc ", loc)
 
 		if interlaceConfig.AlwaysGenerateProv {
 			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)

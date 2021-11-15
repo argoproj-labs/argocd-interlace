@@ -32,12 +32,8 @@ if [ -f $OUTPUT_FILE ]; then
 fi
 
 
-#base_cm='{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":""},"data": {} }'
 
 YQ_VERSION=$(yq --version 2>&1 | awk '{print $3}' | cut -c 1 )
-
-#echo $YQ_VERSION
-#echo $base_cm
 
 if [[ $YQ_VERSION == "3" ]]; then
   echo -e $base_cm | yq r - --prettyPrint >> "$OUTPUT_FILE"

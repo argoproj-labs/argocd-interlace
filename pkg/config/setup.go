@@ -33,9 +33,6 @@ type InterlaceConfig struct {
 	ArgocdServer                string
 	ArgocdApiToken              string
 	ArgocdPwd                   string
-	OciImageRegistry            string
-	OciImagePrefix              string
-	OciImageTag                 string
 	RekorServer                 string
 	RekorTmpDir                 string
 	ManifestAppSetMode          string
