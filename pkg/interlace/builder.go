@@ -33,12 +33,10 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/storage"
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
-	"github.com/IBM/argocd-interlace/pkg/storage/git"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
 	corev1 "k8s.io/api/core/v1"
@@ -73,7 +71,7 @@ func CreateEventHandler(app *appv1.Application) error {
 	if sourceVerified {
 		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-		err := signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
+		err = signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, true,
 		)
 		if err != nil {
@@ -137,7 +135,7 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 		if sourceVerified {
 			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-			err := signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
+			err = signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 				appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, created)
 			if err != nil {
 				return err
@@ -357,13 +355,13 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 
 	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
 
-	if appSourceRepoUrl == interlaceConfig.ManifestGitUrl {
-		log.Info("Skipping changes in application that manages manifest signatures")
-		return nil
-	}
-
 	tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "."), ".")
-	clusterName := tokens[1]
+	clusterName := ""
+	if tokens[1] == "default" {
+		clusterName = "in-cluster"
+	} else {
+		clusterName = tokens[1]
+	}
 
 	allStorageBackEnds, err := storage.InitializeStorageBackends(appName, appPath, appDirPath, appClusterUrl,
 		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, manifestStorageType, clusterName,
@@ -383,11 +381,8 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 
 		loc, _ := time.LoadLocation("UTC")
 		buildStartedOn := time.Now().In(loc)
-		err = storageBackend.SetBuildStartedOn(buildStartedOn)
-		if err != nil {
-			log.Errorf("Error in setting  build start time: %s", err.Error())
-			return err
-		}
+
+		log.Info(">>>>> buildStartedOn:", buildStartedOn, " loc ", loc)
 
 		if created {
 			log.Info("created scenario")
@@ -404,7 +399,7 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 			if err != nil {
 				log.Errorf("Error in retriving latest manifest content: %s", err.Error())
 
-				if storageBackend.Type() == git.StorageBackendGit || storageBackend.Type() == annotation.StorageBackendAnnotation {
+				if storageBackend.Type() == annotation.StorageBackendAnnotation {
 					log.Info("Going to try generating initial manifest again")
 					manifestGenerated, err = manifest.GenerateInitialManifest(appName, appPath, appDirPath)
 					log.Info("manifestGenerated after generating initial manifest again: ", manifestGenerated)
@@ -433,61 +428,21 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 				return err
 			}
 
-			mode := interlaceConfig.ManifestAppSetMode
-			if storageBackend.Type() == git.StorageBackendGit && mode != "appset" {
-				log.Info("check application name application: ", appName)
-				response, err := listApplication(appName)
-
-				if err != nil {
-					log.Errorf("Error in retriving list of applications %s", err.Error())
-					return err
-				}
-
-				log.Info("response from listing application: ", response)
-
-				errorMsg := gjson.Get(response, "error")
-				if strings.Contains(errorMsg.String(), "not found") {
-
-					log.Info("Going create new application for manifest")
-
-					sourcePath := filepath.Join(utils.MANIFEST_DIR, clusterName)
-
-					response, err = createApplication(appName, appPath, appClusterUrl, sourcePath)
-
-					if err != nil {
-						log.Errorf("Error in creating application %s", err.Error())
-						return err
-					}
-
-					log.Info("create application response ", response)
-
-				} else {
-					_, err = updateApplication(appName, appPath, appClusterUrl)
-					if err != nil {
-						log.Errorf("Error in updating application %s", err.Error())
-						return err
-					}
-				}
-			}
-
 		}
 
 		buildFinishedOn := time.Now().In(loc)
-		err = storageBackend.SetBuildFinishedOn(buildFinishedOn)
-		if err != nil {
-			log.Errorf("Error in setting  build start time: %s", err.Error())
-			return err
-		}
+
+		log.Info(">>>>> buildFinishedOn:", buildFinishedOn, " loc ", loc)
 
 		if interlaceConfig.AlwaysGenerateProv {
-			err = storageBackend.StoreManifestProvenance()
+			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
 			if err != nil {
 				log.Errorf("Error in storing manifest provenance: %s", err.Error())
 				return err
 			}
 		} else {
 			if manifestGenerated {
-				err = storageBackend.StoreManifestProvenance()
+				err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
 				if err != nil {
 					log.Errorf("Error in storing manifest provenance: %s", err.Error())
 					return err

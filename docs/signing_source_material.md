@@ -1,6 +1,6 @@
 ### Signing source materials
 
-ArgoCD Interlace requires source materials used for generating manifest for an application deployed via ArgoCD to be signed.  There are two files (`source-material`, `source-materials.sig`)that are need to be created and placed in same level as kustomization.yaml. See example [here](https://github.com/gajananan/kustomize/tree/master/examples/helloWorld)
+ArgoCD Interlace requires source materials used for generating manifest for an application deployed via ArgoCD to be signed.  There are two files (`source-material`, `source-materials.sig`)that are need to be created and placed in same level as kustomization.yaml. 
 
 1. Create `source-material` file which contains source material filenames and their hash values.
   ```

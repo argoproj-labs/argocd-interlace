@@ -26,30 +26,26 @@ import (
 )
 
 type InterlaceConfig struct {
-	LogLevel                string
-	ManifestStorageType     string
-	ArgocdNamespace         string
-	ArgocdApiBaseUrl        string
-	ArgocdServer            string
-	ArgocdApiToken          string
-	ArgocdPwd               string
-	OciImageRegistry        string
-	OciImagePrefix          string
-	OciImageTag             string
-	RekorServer             string
-	RekorTmpDir             string
-	ManifestAppSetMode      string
-	ManifestArgocdProj      string
-	ManifestDestNamespace   string
-	ManifestSuffix          string
-	ManifestGitUrl          string
-	ManifestGitBranch       string
-	ManifestGitUserId       string
-	ManifestGitUserEmail    string
-	ManifestGitToken        string
-	SourceMaterialHashList  string
-	SourceMaterialSignature string
-	AlwaysGenerateProv      bool
+	LogLevel                    string
+	ManifestStorageType         string
+	ArgocdNamespace             string
+	ArgocdApiBaseUrl            string
+	ArgocdServer                string
+	ArgocdApiToken              string
+	ArgocdPwd                   string
+	OciImageRegistry            string
+	OciImagePrefix              string
+	OciImageTag                 string
+	RekorServer                 string
+	RekorTmpDir                 string
+	ManifestAppSetMode          string
+	ManifestArgocdProj          string
+	ManifestSuffix              string
+	SourceMaterialHashList      string
+	SourceMaterialSignature     string
+	AlwaysGenerateProv          bool
+	SignatureAnnotation         string
+	SignatureResourceAnnotation string
 }
 
 var instance *InterlaceConfig
@@ -115,41 +111,34 @@ func newConfig() (*InterlaceConfig, error) {
 	}
 	alwayGenProv, _ := strconv.ParseBool(alwaysGenerateProv)
 
-	config := &InterlaceConfig{
-		LogLevel:                logLevel,
-		ManifestStorageType:     manifestStorageType,
-		ArgocdNamespace:         argocdNamespace,
-		ArgocdApiBaseUrl:        strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
-		ArgocdServer:            strings.TrimSuffix(argocdServer, "\n"),
-		ArgocdApiToken:          strings.TrimSuffix(argocdApiToken, "\n"),
-		ArgocdPwd:               strings.TrimSuffix(argocdPwd, "\n"),
-		SourceMaterialHashList:  sourceHashList,
-		SourceMaterialSignature: sourceHashSignature,
-		AlwaysGenerateProv:      alwayGenProv,
+	signAnnot := os.Getenv("SIGN_ANNOTATION")
+
+	if signAnnot == "" {
+		return nil, fmt.Errorf("SIGN_ANNOTATION is empty, please specify in configuration !")
 	}
 
-	if manifestStorageType == "oci" {
+	signRscAnnot := os.Getenv("SIGNATURE_RSC_ANNOTATION")
 
-		ociImageRegistry := os.Getenv("OCI_IMAGE_REGISTRY")
+	if signRscAnnot == "" {
+		return nil, fmt.Errorf("SIGNATURE_RSC_ANNOTATION is empty, please specify in configuration !")
+	}
 
-		if ociImageRegistry == "" {
-			return nil, fmt.Errorf("OCI_IMAGE_REGISTRY is empty, please specify in configuration !")
-		}
+	config := &InterlaceConfig{
+		LogLevel:                    logLevel,
+		ManifestStorageType:         manifestStorageType,
+		ArgocdNamespace:             argocdNamespace,
+		ArgocdApiBaseUrl:            strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdServer:                strings.TrimSuffix(argocdServer, "\n"),
+		ArgocdApiToken:              strings.TrimSuffix(argocdApiToken, "\n"),
+		ArgocdPwd:                   strings.TrimSuffix(argocdPwd, "\n"),
+		SourceMaterialHashList:      sourceHashList,
+		SourceMaterialSignature:     sourceHashSignature,
+		AlwaysGenerateProv:          alwayGenProv,
+		SignatureAnnotation:         signAnnot,
+		SignatureResourceAnnotation: signRscAnnot,
+	}
 
-		config.OciImageRegistry = ociImageRegistry
-
-		ociImagePrefix := os.Getenv("OCI_IMAGE_PREFIX")
-		if ociImagePrefix == "" {
-			return nil, fmt.Errorf("OCI_IMAGE_PREFIX is empty, please specify in configuration !")
-		}
-		config.OciImagePrefix = ociImagePrefix
-
-		ociImageTag := os.Getenv("OCI_IMAGE_TAG")
-		if ociImageTag == "" {
-			return nil, fmt.Errorf("OCI_IMAGE_TAG is empty, please specify in configuration !")
-		}
-		config.OciImageTag = ociImageTag
-
+	if manifestStorageType == "annotation" {
 		rekorServer := os.Getenv("REKOR_SERVER")
 		if rekorServer == "" {
 			return nil, fmt.Errorf("REKOR_SERVER is empty, please specify in configuration !")
@@ -157,87 +146,6 @@ func newConfig() (*InterlaceConfig, error) {
 		config.RekorServer = rekorServer
 
 		config.RekorTmpDir = os.Getenv("REKORTMPDIR")
-
-		return config, nil
-	} else if manifestStorageType == "annotation" {
-		rekorServer := os.Getenv("REKOR_SERVER")
-		if rekorServer == "" {
-			return nil, fmt.Errorf("REKOR_SERVER is empty, please specify in configuration !")
-		}
-		config.RekorServer = rekorServer
-
-		config.RekorTmpDir = os.Getenv("REKORTMPDIR")
-
-		return config, nil
-
-	} else if manifestStorageType == "git" {
-
-		manifestAppSetMode := os.Getenv("MANIFEST_GITREPO_MODE")
-
-		if manifestAppSetMode == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_MODE is empty, please specify in configuration !")
-		}
-
-		config.ManifestAppSetMode = manifestAppSetMode
-
-		manifestArgocdProj := os.Getenv("MANIFEST_ARGOCD_PROJECT")
-
-		if manifestArgocdProj == "" {
-			return nil, fmt.Errorf("MANIFEST_ARGOCD_PROJECT is empty, please specify in configuration !")
-		}
-
-		config.ManifestArgocdProj = manifestArgocdProj
-
-		manifestDestNamespace := os.Getenv("MANIFEST_DEST_NAMESPACE")
-
-		if manifestDestNamespace == "" {
-			return nil, fmt.Errorf("MANIFEST_DEST_NAMESPACE is empty, please specify in configuration !")
-		}
-		config.ManifestDestNamespace = manifestDestNamespace
-
-		manifestSuffix := os.Getenv("MANIFEST_GITREPO_SUFFIX")
-
-		if manifestSuffix == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_SUFFIX is empty, please specify in configuration !")
-		}
-
-		config.ManifestSuffix = manifestSuffix
-
-		manifestGitUrl := os.Getenv("MANIFEST_GITREPO_URL")
-
-		if manifestGitUrl == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_URL is empty, please specify in configuration !")
-		}
-		config.ManifestGitUrl = manifestGitUrl
-
-		manifestGitBranch := os.Getenv("MANIFEST_GITREPO_BRANCH")
-
-		if manifestGitBranch == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_BRANCH is empty, please specify in configuration !")
-		}
-
-		config.ManifestGitBranch = manifestGitBranch
-
-		manifestGitUserId := os.Getenv("MANIFEST_GITREPO_USER")
-
-		if manifestGitUserId == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_USER is empty, please specify in configuration !")
-		}
-		config.ManifestGitUserId = manifestGitUserId
-
-		manifestGitUserEmail := os.Getenv("MANIFEST_GITREPO_USEREMAIL")
-
-		if manifestGitUserEmail == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_USEREMAIL is empty, please specify in configuration !")
-		}
-		config.ManifestGitUserEmail = manifestGitUserEmail
-
-		manifestGitToken := os.Getenv("MANIFEST_GITREPO_TOKEN")
-
-		if manifestGitToken == "" {
-			return nil, fmt.Errorf("MANIFEST_GITREPO_TOKEN is empty, please specify in configuration !")
-		}
-		config.ManifestGitToken = manifestGitToken
 
 		return config, nil
 

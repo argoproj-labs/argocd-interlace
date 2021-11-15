@@ -17,9 +17,15 @@
 package annotation
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
+	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/sign"
 	"github.com/IBM/argocd-interlace/pkg/utils"
@@ -59,6 +65,7 @@ func NewStorageBackend(appName, appPath, appDirPath,
 }
 
 func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
+	/// Should we query secret from cluster via ArgoCD REST API ?
 	return nil, nil
 }
 
@@ -91,24 +98,42 @@ func (s StorageBackend) StoreManifestBundle() error {
 		kind := obj.GetKind()
 		resourceName := obj.GetName()
 		namespace := obj.GetNamespace()
+		resourceAnnotatons := obj.GetAnnotations()
+		log.Info("resourceAnnotatons ", resourceAnnotatons)
+		interlaceConfig, err := config.GetInterlaceConfig()
 
-		log.Info("Going to patch kind:", kind, " name:", obj.GetName(), " in namespace:", obj.GetNamespace())
+		isSignatureresource, _ := strconv.ParseBool(resourceAnnotatons[interlaceConfig.SignatureResourceAnnotation])
+		log.Info("isSignatureresource :", isSignatureresource)
 
-		annotations = k8smnfutil.GetAnnotationsInYAML(item)
-		message := annotations["cosign.sigstore.dev/message"]
-		signature := annotations["cosign.sigstore.dev/signature"]
+		if isSignatureresource {
+			log.Info("Going to patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
 
-		log.Info("message: ", message)
-		log.Info("signature: ", signature)
+			annotations = k8smnfutil.GetAnnotationsInYAML(item)
+			message := annotations["cosign.sigstore.dev/message"]
+			signature := annotations["cosign.sigstore.dev/signature"]
 
-		err = utils.ApplyArgoPatch(kind, resourceName, namespace, s.appName, message, signature)
+			log.Info("message: ", message)
+			log.Info("signature: ", signature)
 
-		if err != nil {
-			log.Errorf("Error in patching application resource config: %s", err.Error())
-			return nil
+			patchData, err := preparePatch(message, signature)
+			if err != nil {
+				log.Errorf("Error in creating patch for application resource config: %s", err.Error())
+				return err
+			}
+
+			log.Info("len(patchData)", len(patchData))
+			log.Info("patchData)", patchData)
+
+			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appName)
+
+			err = utils.ApplyResourcePatch(kind, resourceName, namespace, s.appName, patchData)
+
+			if err != nil {
+				log.Errorf("Error in patching application resource config: %s", err.Error())
+				return nil
+			}
+
 		}
-
-		log.Infof("[INFO][%s] Interlace attaches signature to policy as annotation:", s.appName)
 
 	}
 
@@ -119,16 +144,55 @@ func (s StorageBackend) StoreManifestBundle() error {
 	return nil
 }
 
-func (s StorageBackend) StoreManifestProvenance() error {
-	err := provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
+func preparePatch(message, signature string) ([]string, error) {
+
+	var patchData []string
+	sigAnnot := "cosign.sigstore.dev/signature"
+	patchSig := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
+		"metadata", "annotations", sigAnnot, signature)
+	patchData = append(patchData, patchSig)
+
+	msgAnnot := "cosign.sigstore.dev/message"
+	patchMsg := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
+		"metadata", "annotations", msgAnnot, message)
+
+	patchData = append(patchData, patchMsg)
+
+	return patchData, nil
+}
+
+func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
+	manifestPath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
+	computedFileHash, err := computeHash(manifestPath)
+
+	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
 		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
-		"", "", s.buildStartedOn, s.buildFinishedOn, true)
+		manifestPath, computedFileHash, buildStartedOn, buildFinishedOn, true)
 	if err != nil {
 		log.Errorf("Error in storing provenance: %s", err.Error())
 		return err
 	}
 
 	return nil
+}
+
+func computeHash(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Info("Error in opening file !")
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		log.Info("Error in copying file !")
+		return "", err
+	}
+
+	sum := h.Sum(nil)
+	hashstring := fmt.Sprintf("%x", sum)
+	return hashstring, nil
 }
 
 func GetKindInYAML(yamlBytes []byte) string {
@@ -139,16 +203,6 @@ func GetKindInYAML(yamlBytes []byte) string {
 		return ""
 	}
 	return obj.GetKind()
-}
-
-func (s StorageBackend) SetBuildStartedOn(buildStartedOn time.Time) error {
-	s.buildStartedOn = buildStartedOn
-	return nil
-}
-
-func (s StorageBackend) SetBuildFinishedOn(buildFinishedOn time.Time) error {
-	s.buildFinishedOn = buildFinishedOn
-	return nil
 }
 
 func (b *StorageBackend) Type() string {

@@ -4,7 +4,7 @@
     - name: DOCKER_CONFIG
       value: /tmp/.docker/
     - name: MANIFEST_STORAGE_TYPE
-      value:  annotation #oci #  #/git/oci
+      value:  annotation #oci
     - name: OCI_IMAGE_REGISTRY
       value: gcr.io/<some-registry-name>
     - name: OCI_IMAGE_PREFIX
@@ -21,48 +21,12 @@
       value: "true"
     - name: COSIGN_PASSWORD
       value: ""
+    - name: SIGN_ANNOTATION
+      value: 'apps.open-cluster-management.io/deployables'
     - name: MANIFEST_ARGOCD_PROJECT
       value: default
-    - name: MANIFEST_GITREPO_URL  
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_URL
-    - name: MANIFEST_GITREPO_SUFFIX
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_SUFFIX
-    - name: MANIFEST_GITREPO_BRANCH
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_BRANCH
-    - name: MANIFEST_GITREPO_TOKEN
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_TOKEN
-    - name: MANIFEST_GITREPO_USER
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_USER
-    - name: MANIFEST_GITREPO_USEREMAIL
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_USEREMAIL
-    - name: MANIFEST_DEST_NAMESPACE
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_DEST_NAMESPACE
-    - name: MANIFEST_GITREPO_MODE
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_MODE
+    - name: SIGNATURE_RSC_ANNOTATION
+      value: "argocd.interlace.dev/signature-resource" 
     - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
       value: info
     - name: ARGOCD_INTERLACE_LOG_LEVEL

@@ -106,7 +106,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 	return nil
 }
 
-func (s StorageBackend) StoreManifestProvenance() error {
+func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	imageDigest, err := getDigest(s.imageRef)
 	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
 		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
@@ -115,16 +115,6 @@ func (s StorageBackend) StoreManifestProvenance() error {
 		log.Errorf("Error in storing provenance: %s", err.Error())
 		return err
 	}
-	return nil
-}
-
-func (s StorageBackend) SetBuildStartedOn(buildStartedOn time.Time) error {
-	s.buildStartedOn = buildStartedOn
-	return nil
-}
-
-func (s StorageBackend) SetBuildFinishedOn(buildFinishedOn time.Time) error {
-	s.buildFinishedOn = buildFinishedOn
 	return nil
 }
 
