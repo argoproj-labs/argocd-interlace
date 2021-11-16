@@ -33,6 +33,13 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const (
+	ARGOCD_CONFIG_NAME    = "argocd-cm"
+	ARGOCD_CONFIG_KIND    = "ConfigMap"
+	ARGOCD_CONFIG_API_VER = "v1"
+	ARGOCD_SECRET_KIND    = "Secret"
+)
+
 func GitLatestCommitSha(repoUrl string, branch string) string {
 
 	gitToken := GetRepoCredentials(repoUrl)
@@ -84,10 +91,10 @@ func GetRepoCredentials(repoUrl string) string {
 
 	k8sutil.SetKubeConfig(cfg)
 
-	apiVersion := "v1"
-	kind := "ConfigMap"
+	apiVersion := ARGOCD_CONFIG_API_VER
+	kind := ARGOCD_CONFIG_KIND
+	name := ARGOCD_CONFIG_NAME
 	namespace := interlaceConfig.ArgocdNamespace
-	name := "argocd-cm"
 
 	argoConfigMapObj, err := k8sutil.GetResource(apiVersion, kind, namespace, name)
 
@@ -121,7 +128,7 @@ func GetRepoCredentials(repoUrl string) string {
 
 	if found {
 
-		kind = "Secret"
+		kind = ARGOCD_SECRET_KIND
 
 		argoSecretObj, err := k8sutil.GetResource(apiVersion, kind, namespace, secretName)
 		if err != nil {

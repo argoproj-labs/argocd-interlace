@@ -36,7 +36,7 @@ func ApplyResourcePatch(kind, resourceName, namespace, appName string, patches [
 	}
 
 	var result bool = false
-	err = retry(10, 2*time.Second, func() (res bool, err error) {
+	err = retry(RETRY_ATTEMPTS, 2*time.Second, func() (res bool, err error) {
 		result := patchResource(kind, resourceName, namespace, appName, patches)
 		return result, nil
 	})

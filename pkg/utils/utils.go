@@ -38,7 +38,6 @@ import (
 )
 
 const (
-	CONFIG_FILE_NAME          = "manifest-bundle.yaml"
 	MANIFEST_FILE_NAME        = "manifest.yaml"
 	MANIFEST_DIR              = "manifest-bundles"
 	SIGNED_MANIFEST_FILE_NAME = "manifest.signed"
@@ -47,6 +46,10 @@ const (
 	TMP_DIR                   = "/tmp/output"
 	PRIVATE_KEY_PATH          = "/etc/signing-secrets/cosign.key"
 	PUB_KEY_PATH              = "/etc/signing-secrets/cosign.pub"
+	KEYRING_PUB_KEY_PATH      = "/etc/keyring-secret/pubring.gpg"
+	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
+	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
+	RETRY_ATTEMPTS            = 10
 )
 
 //GetClient returns a kubernetes client
@@ -173,24 +176,24 @@ func FileExist(fpath string) bool {
 	return false
 }
 
-func Sha256Hash(filePath string) (string, error) {
-
+func ComputeHash(filePath string) (string, error) {
 	if FileExist(filePath) {
 		f, err := os.Open(filePath)
 		if err != nil {
+			log.Info("Error in opening file !")
 			return "", err
 		}
 		defer f.Close()
 
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
-			log.Errorf("Error in computing sha256 %s ", err.Error())
+			log.Info("Error in copying file !")
 			return "", err
 		}
 
-		hash := fmt.Sprintf("%x", h.Sum(nil))
-		log.Infof("sha256 of a file: %s", hash)
-		return hash, nil
+		sum := h.Sum(nil)
+		hashstring := fmt.Sprintf("%x", sum)
+		return hashstring, nil
 	}
 	return "", fmt.Errorf("File not found ")
 }

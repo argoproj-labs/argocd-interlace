@@ -18,10 +18,7 @@ package interlace
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -35,11 +32,9 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
-	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func CreateEventHandler(app *appv1.Application) error {
@@ -170,7 +165,7 @@ func verifySourceMaterial(appPath, appSourceRepoUrl string) (bool, error) {
 
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	keyPath := "/etc/keyring-secret/pubring.gpg"
+	keyPath := utils.KEYRING_PUB_KEY_PATH
 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
@@ -242,29 +237,6 @@ func NewSignerFromUserId(uid *packet.UserId) *Signer {
 	}
 }
 
-func LoadKeyRingSecret(keyPath string) error {
-
-	secretName := "keyring-secret"
-
-	obj, err := kubeutil.GetResource("v1", "Secret", "argocd-interlace", secretName)
-
-	if err != nil {
-		log.Warn(fmt.Sprintf("Failed to get secret `%s`; %s", secretName, err.Error()))
-
-	}
-	objBytes, _ := json.Marshal(obj)
-	var res corev1.Secret
-	_ = json.Unmarshal(objBytes, &res)
-
-	newPathFile := "pubring.gpg"
-	pubKeyBytes, ok := res.Data[newPathFile]
-	if !ok {
-		log.Warn(fmt.Sprintf("Failed to get a pubKeyBytes from secret `%s`, file %s", secretName, newPathFile))
-	}
-
-	err = ioutil.WriteFile(keyPath, pubKeyBytes, 0755)
-	return nil
-}
 func LoadKeyRing(keyPath string) (openpgp.EntityList, error) {
 	entities := []*openpgp.Entity{}
 	var retErr error
@@ -307,7 +279,7 @@ func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 			path := data[2]
 
 			absPath := filepath.Join(baseDir, "/", path)
-			computedFileHash, err := computeHash(absPath)
+			computedFileHash, err := utils.ComputeHash(absPath)
 			log.Info("file: ", path, " hash:", hash, " absPath:", absPath, " computedFileHash: ", computedFileHash)
 			if err != nil {
 				return false, err
@@ -321,25 +293,6 @@ func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 		}
 	}
 	return true, nil
-}
-
-func computeHash(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		log.Info("Error in opening file !")
-		return "", err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		log.Info("Error in copying file !")
-		return "", err
-	}
-
-	sum := h.Sum(nil)
-	hashstring := fmt.Sprintf("%x", sum)
-	return hashstring, nil
 }
 
 func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,

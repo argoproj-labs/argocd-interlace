@@ -17,10 +17,7 @@
 package annotation
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -65,7 +62,6 @@ func NewStorageBackend(appName, appPath, appDirPath,
 }
 
 func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
-	/// Should we query secret from cluster via ArgoCD REST API ?
 	return nil, nil
 }
 
@@ -109,13 +105,13 @@ func (s StorageBackend) StoreManifestBundle() error {
 			log.Info("Going to patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
 
 			annotations = k8smnfutil.GetAnnotationsInYAML(item)
-			message := annotations["cosign.sigstore.dev/message"]
-			signature := annotations["cosign.sigstore.dev/signature"]
+			message := annotations[utils.MSG_ANNOTATION_NAME]
+			signature := annotations[utils.SIG_ANNOTATION_NAME]
 
 			log.Info("message: ", message)
 			log.Info("signature: ", signature)
 
-			patchData, err := preparePatch(message, signature)
+			patchData, err := preparePatch(message, signature, kind)
 			if err != nil {
 				log.Errorf("Error in creating patch for application resource config: %s", err.Error())
 				return err
@@ -144,26 +140,36 @@ func (s StorageBackend) StoreManifestBundle() error {
 	return nil
 }
 
-func preparePatch(message, signature string) ([]string, error) {
+func preparePatch(message, signature, kind string) ([]string, error) {
 
 	var patchData []string
-	sigAnnot := "cosign.sigstore.dev/signature"
-	patchSig := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-		"metadata", "annotations", sigAnnot, signature)
-	patchData = append(patchData, patchSig)
+	if kind == "Secret" {
 
-	msgAnnot := "cosign.sigstore.dev/message"
-	patchMsg := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-		"metadata", "annotations", msgAnnot, message)
+		patchSig := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
+			"data", "signature", signature)
+		patchData = append(patchData, patchSig)
+		patchMsg := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
+			"data", "message", message)
+		patchData = append(patchData, patchMsg)
+	} else {
+		sigAnnot := utils.SIG_ANNOTATION_NAME
+		patchSig := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
+			"metadata", "annotations", sigAnnot, signature)
+		patchData = append(patchData, patchSig)
 
-	patchData = append(patchData, patchMsg)
+		msgAnnot := utils.MSG_ANNOTATION_NAME
+		patchMsg := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
+			"metadata", "annotations", msgAnnot, message)
+
+		patchData = append(patchData, patchMsg)
+	}
 
 	return patchData, nil
 }
 
 func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	manifestPath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
-	computedFileHash, err := computeHash(manifestPath)
+	computedFileHash, err := utils.ComputeHash(manifestPath)
 
 	err = provenance.GenerateProvanance(s.appName, s.appPath, s.appSourceRepoUrl,
 		s.appSourceRevision, s.appSourceCommitSha, s.appSourcePreiviousCommitSha,
@@ -174,35 +180,6 @@ func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildF
 	}
 
 	return nil
-}
-
-func computeHash(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		log.Info("Error in opening file !")
-		return "", err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		log.Info("Error in copying file !")
-		return "", err
-	}
-
-	sum := h.Sum(nil)
-	hashstring := fmt.Sprintf("%x", sum)
-	return hashstring, nil
-}
-
-func GetKindInYAML(yamlBytes []byte) string {
-
-	var obj unstructured.Unstructured
-	err := yaml.Unmarshal(yamlBytes, &obj)
-	if err != nil {
-		return ""
-	}
-	return obj.GetKind()
 }
 
 func (b *StorageBackend) Type() string {
