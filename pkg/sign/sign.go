@@ -21,10 +21,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func SignManifest(imageRef, keyPath, manifestPath, signedManifestPath string) ([]byte, error) {
+func SignManifest(keyPath, manifestPath, signedManifestPath string) ([]byte, error) {
 
 	so := &k8smanifest.SignOption{
-		ImageRef:         imageRef,
+		ImageRef:         "",
 		KeyPath:          keyPath,
 		Output:           signedManifestPath,
 		UpdateAnnotation: true,

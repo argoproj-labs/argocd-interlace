@@ -71,7 +71,7 @@ func (s StorageBackend) StoreManifestBundle() error {
 	manifestPath := filepath.Join(s.appDirPath, utils.MANIFEST_FILE_NAME)
 	signedManifestPath := filepath.Join(s.appDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
 
-	signedBytes, err := sign.SignManifest("", keyPath, manifestPath, signedManifestPath)
+	signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
 		log.Errorf("Error in signing bundle image: %s", err.Error())
