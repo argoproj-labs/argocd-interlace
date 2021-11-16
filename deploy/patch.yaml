@@ -15,8 +15,6 @@
       value: "true"
     - name: COSIGN_PASSWORD
       value: ""
-    - name: SIGN_ANNOTATION
-      value: 'apps.open-cluster-management.io/deployables'
     - name: MANIFEST_ARGOCD_PROJECT
       value: default
     - name: SIGNATURE_RSC_ANNOTATION

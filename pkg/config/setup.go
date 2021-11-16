@@ -41,7 +41,6 @@ type InterlaceConfig struct {
 	SourceMaterialHashList      string
 	SourceMaterialSignature     string
 	AlwaysGenerateProv          bool
-	SignatureAnnotation         string
 	SignatureResourceAnnotation string
 }
 
@@ -108,12 +107,6 @@ func newConfig() (*InterlaceConfig, error) {
 	}
 	alwayGenProv, _ := strconv.ParseBool(alwaysGenerateProv)
 
-	signAnnot := os.Getenv("SIGN_ANNOTATION")
-
-	if signAnnot == "" {
-		return nil, fmt.Errorf("SIGN_ANNOTATION is empty, please specify in configuration !")
-	}
-
 	signRscAnnot := os.Getenv("SIGNATURE_RSC_ANNOTATION")
 
 	if signRscAnnot == "" {
@@ -131,7 +124,6 @@ func newConfig() (*InterlaceConfig, error) {
 		SourceMaterialHashList:      sourceHashList,
 		SourceMaterialSignature:     sourceHashSignature,
 		AlwaysGenerateProv:          alwayGenProv,
-		SignatureAnnotation:         signAnnot,
 		SignatureResourceAnnotation: signRscAnnot,
 	}
 
