@@ -117,11 +117,11 @@ func GenerateProvanance(appName, appPath,
 	it := in_toto.Statement{
 		StatementHeader: in_toto.StatementHeader{
 			Type:          in_toto.StatementInTotoV01,
-			PredicateType: in_toto.PredicateProvenanceV01,
+			PredicateType: in_toto.PredicateSLSAProvenanceV01,
 			Subject:       subjects,
 		},
 		Predicate: in_toto.ProvenancePredicate{
-			Metadata: in_toto.ProvenanceMetadata{
+			Metadata: &in_toto.ProvenanceMetadata{
 				Reproducible:    true,
 				BuildStartedOn:  &buildStartedOn,
 				BuildFinishedOn: &buildFinishedOn,
