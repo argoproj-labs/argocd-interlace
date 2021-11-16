@@ -16,7 +16,7 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+          image: quay.io/gajananan/argocd-interlace-controller:dev
           imagePullPolicy: Always
           command:
             - argocd-interlace
@@ -27,17 +27,14 @@ spec:
               mountPath: /tmp/output
             - name: signing-secrets
               mountPath: /etc/signing-secrets
-            - name: gcr-registry-docker-config
-              mountPath: /tmp/.docker/
+            - name: keyring-secret
+              mountPath: /etc/keyring-secret
       volumes:
         - name: signing-secrets
           secret:
             secretName: signing-secrets
+        - name: keyring-secret
+          secret:
+            secretName: keyring-secret
         - name: output
           emptyDir: {}
-        - name: gcr-registry-docker-config
-          secret:
-            secretName: argocd-interlace-gcr-secret
-            items:
-              - key: .dockerconfigjson
-                path: config.json

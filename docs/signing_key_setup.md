@@ -1,6 +1,6 @@
 ## Setting up Cosign Signing
 
-ArgoCD Interlace uses [cosign](https://github.com/sigstore/cosign) for siging the manifest generated as an OCI image.
+ArgoCD Interlace uses [cosign](https://github.com/sigstore/cosign) for siging the manifest generated.
 
 To create a cosign keypair, `cosign.key` and `cosign.pub`, install cosign and run the following:
 ```shell

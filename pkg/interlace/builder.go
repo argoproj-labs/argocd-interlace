@@ -17,7 +17,10 @@
 package interlace
 
 import (
+	"bufio"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,11 +29,12 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/manifest"
 	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/storage"
-	"github.com/IBM/argocd-interlace/pkg/storage/git"
+	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
+	"golang.org/x/crypto/openpgp"
+	"golang.org/x/crypto/openpgp/packet"
 )
 
 func CreateEventHandler(app *appv1.Application) error {
@@ -47,13 +51,29 @@ func CreateEventHandler(app *appv1.Application) error {
 	if commitSha != "" {
 		appSourceCommitSha = commitSha
 	}
+
 	log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
+
 	appPath := app.Spec.Source.Path
 	appSourcePreiviousCommitSha := ""
-	err := signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
-		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, true,
-	)
+
+	sourceVerified, err := verifySourceMaterial(appPath, appSourceRepoUrl)
+
 	if err != nil {
+		return err
+	}
+
+	if sourceVerified {
+		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
+
+		err = signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
+			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, true,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
 		return err
 	}
 	return nil
@@ -64,7 +84,7 @@ func CreateEventHandler(app *appv1.Application) error {
 // Retrive latest manifest via ArgoCD api
 // Sign manifest
 // Generate provenance record
-// Store signed manifest, provenance record in OCI registry/Git
+// Store signed manifest, provenance record in annotation
 func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 
 	generateManifest := false
@@ -98,16 +118,181 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 			appSourcePreiviousCommit := revisionHistories[len(revisionHistories)-1]
 			appSourcePreiviousCommitSha = appSourcePreiviousCommit.Revision
 		}
+
 		log.Infof("[INFO][%s]: Interlace detected update of existing Application resource: %s", appName, appName)
 
-		err := signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
-			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, created)
+		sourceVerified, err := verifySourceMaterial(appPath, appSourceRepoUrl)
+
 		if err != nil {
+			return err
+		}
+
+		if sourceVerified {
+			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
+
+			err = signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
+				appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, created)
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
 			return err
 		}
 
 	}
 	return nil
+}
+
+func verifySourceMaterial(appPath, appSourceRepoUrl string) (bool, error) {
+
+	interlaceConfig, err := config.GetInterlaceConfig()
+
+	host, orgRepo, path, gitRef, gitSuff := provenance.ParseGitUrl(appSourceRepoUrl)
+
+	log.Info("appSourceRepoUrl ", appSourceRepoUrl)
+	log.Info("host:", host, " orgRepo:", orgRepo, " path:", path, " gitRef:", gitRef, " gitSuff:", gitSuff)
+
+	url := host + orgRepo + gitSuff
+
+	log.Info("url:", url)
+
+	r, err := provenance.GetTopGitRepo(url)
+	if err != nil {
+		log.Errorf("Error git clone:  %s", err.Error())
+		return false, err
+	}
+
+	baseDir := filepath.Join(r.RootDir, appPath)
+
+	keyPath := utils.KEYRING_PUB_KEY_PATH
+
+	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
+	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
+
+	verification_target, err := os.Open(srcMatPath)
+	signature, err := os.Open(srcMatSigPath)
+	flag, _, _, _, _ := verifySignature(keyPath, verification_target, signature)
+
+	hashCompareSuccess := false
+	if flag {
+		hashCompareSuccess, err = compareHash(srcMatPath, baseDir)
+		if err != nil {
+			return hashCompareSuccess, err
+		}
+		return hashCompareSuccess, nil
+	}
+
+	return flag, nil
+}
+
+func verifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, []byte, error) {
+
+	if keyRing, err := LoadKeyRing(keyPath); err != nil {
+		return false, "Error when loading key ring", nil, nil, err
+	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig); signer == nil {
+		if err != nil {
+			log.Error("Signature verification error:", err.Error())
+		}
+		return false, "Signed by unauthrized subject (signer is not in public key), or invalid format signature", nil, nil, nil
+	} else {
+		idt := GetFirstIdentity(signer)
+		fingerprint := ""
+		if signer.PrimaryKey != nil {
+			fingerprint = fmt.Sprintf("%X", signer.PrimaryKey.Fingerprint)
+		}
+		return true, "", NewSignerFromUserId(idt.UserId), []byte(fingerprint), nil
+	}
+}
+
+func GetFirstIdentity(signer *openpgp.Entity) *openpgp.Identity {
+	for _, idt := range signer.Identities {
+		return idt
+	}
+	return nil
+}
+
+type Signer struct {
+	Email              string `json:"email,omitempty"`
+	Name               string `json:"name,omitempty"`
+	Comment            string `json:"comment,omitempty"`
+	Uid                string `json:"uid,omitempty"`
+	Country            string `json:"country,omitempty"`
+	Organization       string `json:"organization,omitempty"`
+	OrganizationalUnit string `json:"organizationalUnit,omitempty"`
+	Locality           string `json:"locality,omitempty"`
+	Province           string `json:"province,omitempty"`
+	StreetAddress      string `json:"streetAddress,omitempty"`
+	PostalCode         string `json:"postalCode,omitempty"`
+	CommonName         string `json:"commonName,omitempty"`
+	SerialNumber       string `json:"serialNumber,omitempty"`
+	Fingerprint        []byte `json:"finerprint"`
+}
+
+func NewSignerFromUserId(uid *packet.UserId) *Signer {
+	return &Signer{
+		Email:   uid.Email,
+		Name:    uid.Name,
+		Comment: uid.Comment,
+	}
+}
+
+func LoadKeyRing(keyPath string) (openpgp.EntityList, error) {
+	entities := []*openpgp.Entity{}
+	var retErr error
+	kpath := filepath.Clean(keyPath)
+	if keyRingReader, err := os.Open(kpath); err != nil {
+		log.Warn("Failed to open keyring")
+		retErr = err
+	} else {
+		tmpList, err := openpgp.ReadKeyRing(keyRingReader)
+		if err != nil {
+			log.Warn("Failed to read keyring")
+			retErr = err
+		}
+		for _, tmp := range tmpList {
+			for _, id := range tmp.Identities {
+				log.Info("identity name ", id.Name, " id.UserId.Name: ", id.UserId.Name, " id.UserId.Email:", id.UserId.Email)
+			}
+			entities = append(entities, tmp)
+		}
+	}
+	return openpgp.EntityList(entities), retErr
+}
+
+func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
+	sourceMaterial, err := ioutil.ReadFile(sourceMaterialPath)
+
+	if err != nil {
+		log.Errorf("Error in reading sourceMaterialPath:  %s", err.Error())
+		return false, err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(sourceMaterial)))
+
+	for scanner.Scan() {
+		l := scanner.Text()
+
+		data := strings.Split(l, " ")
+		if len(data) > 2 {
+			hash := data[0]
+			path := data[2]
+
+			absPath := filepath.Join(baseDir, "/", path)
+			computedFileHash, err := utils.ComputeHash(absPath)
+			log.Info("file: ", path, " hash:", hash, " absPath:", absPath, " computedFileHash: ", computedFileHash)
+			if err != nil {
+				return false, err
+			}
+
+			if hash != computedFileHash {
+				return false, nil
+			}
+		} else {
+			continue
+		}
+	}
+	return true, nil
 }
 
 func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
@@ -123,17 +308,8 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 
 	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
 
-	if appSourceRepoUrl == interlaceConfig.ManifestGitUrl {
-		log.Info("Skipping changes in application that manages manifest signatures")
-		return nil
-	}
-
-	//tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "https://"), "https://")
-	tokens := strings.Split(strings.TrimSuffix(appClusterUrl, "."), ".")
-	clusterName := tokens[1]
-
 	allStorageBackEnds, err := storage.InitializeStorageBackends(appName, appPath, appDirPath, appClusterUrl,
-		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, manifestStorageType, clusterName,
+		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, manifestStorageType,
 	)
 
 	if err != nil {
@@ -142,18 +318,16 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 	}
 
 	storageBackend := allStorageBackEnds[manifestStorageType]
-
+	log.Info("manifestStorageType ", manifestStorageType)
+	log.Info("storageBackend ", storageBackend)
 	if storageBackend != nil {
 
 		manifestGenerated := false
 
 		loc, _ := time.LoadLocation("UTC")
 		buildStartedOn := time.Now().In(loc)
-		err = storageBackend.SetBuildStartedOn(buildStartedOn)
-		if err != nil {
-			log.Errorf("Error in setting  build start time: %s", err.Error())
-			return err
-		}
+
+		log.Info("buildStartedOn:", buildStartedOn, " loc ", loc)
 
 		if created {
 			log.Info("created scenario")
@@ -170,7 +344,7 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 			if err != nil {
 				log.Errorf("Error in retriving latest manifest content: %s", err.Error())
 
-				if storageBackend.Type() == git.StorageBackendGit {
+				if storageBackend.Type() == annotation.StorageBackendAnnotation {
 					log.Info("Going to try generating initial manifest again")
 					manifestGenerated, err = manifest.GenerateInitialManifest(appName, appPath, appDirPath)
 					log.Info("manifestGenerated after generating initial manifest again: ", manifestGenerated)
@@ -199,48 +373,25 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 				return err
 			}
 
-			mode := interlaceConfig.ManifestAppSetMode
-			if storageBackend.Type() == git.StorageBackendGit && mode != "appset" {
-				log.Info("check application name application: ", appName)
-				response, err := listApplication(appName)
+		}
 
+		buildFinishedOn := time.Now().In(loc)
+
+		log.Info("buildFinishedOn:", buildFinishedOn, " loc ", loc)
+
+		if interlaceConfig.AlwaysGenerateProv {
+			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
+			if err != nil {
+				log.Errorf("Error in storing manifest provenance: %s", err.Error())
+				return err
+			}
+		} else {
+			if manifestGenerated {
+				err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
 				if err != nil {
-					log.Errorf("Error in retriving list of applications %s", err.Error())
+					log.Errorf("Error in storing manifest provenance: %s", err.Error())
 					return err
 				}
-
-				log.Info("response from listing application: ", response)
-
-				errorMsg := gjson.Get(response, "error")
-				if strings.Contains(errorMsg.String(), "not found") {
-
-					log.Info("Going create new application for manifest")
-
-					sourcePath := filepath.Join(utils.MANIFEST_DIR, clusterName)
-
-					response, err = createApplication(appName, appPath, appClusterUrl, sourcePath)
-
-					if err != nil {
-						log.Errorf("Error in creating application %s", err.Error())
-						return err
-					}
-
-					log.Info("create application response ", response)
-
-				} else {
-					_, err = updateApplication(appName, appPath, appClusterUrl)
-					if err != nil {
-						log.Errorf("Error in updating application %s", err.Error())
-						return err
-					}
-				}
-			}
-
-			buildFinishedOn := time.Now().In(loc)
-			err = storageBackend.SetBuildFinishedOn(buildFinishedOn)
-			if err != nil {
-				log.Errorf("Error in setting  build start time: %s", err.Error())
-				return err
 			}
 		}
 	} else {
@@ -248,5 +399,10 @@ func signManifestAndGenerateProvenance(appName, appPath, appClusterUrl,
 		return fmt.Errorf("Could not find storage backend")
 	}
 
+	return nil
+}
+
+func GenerateProvenance(appName, appPath, appClusterUrl,
+	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha string, created bool) error {
 	return nil
 }

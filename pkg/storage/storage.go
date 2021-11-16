@@ -19,45 +19,36 @@ package storage
 import (
 	"time"
 
-	"github.com/IBM/argocd-interlace/pkg/storage/git"
-	"github.com/IBM/argocd-interlace/pkg/storage/oci"
+	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 )
 
 type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
 	StoreManifestBundle() error
-	SetBuildStartedOn(buildStartedOn time.Time) error
-	SetBuildFinishedOn(buildFinishedOn time.Time) error
+	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error
 	Type() string
 }
 
 func InitializeStorageBackends(appName, appPath, appDirPath, clusterUrl,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-	manifestStorageType, clusterName string) (map[string]StorageBackend, error) {
+	manifestStorageType string) (map[string]StorageBackend, error) {
 
-	configuredStorageBackends := []string{git.StorageBackendGit, oci.StorageBackendOCI}
+	configuredStorageBackends := []string{annotation.StorageBackendAnnotation}
 
 	storageBackends := map[string]StorageBackend{}
 	for _, backendType := range configuredStorageBackends {
 		if manifestStorageType == backendType {
 			switch backendType {
-			case oci.StorageBackendOCI:
 
-				ociStorageBackend, err := oci.NewStorageBackend(appName, appPath, appDirPath,
+			case annotation.StorageBackendAnnotation:
+
+				annotationStorageBackend, err := annotation.NewStorageBackend(appName, appPath, appDirPath,
 					appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha)
 				if err != nil {
 					return nil, err
 				}
-				storageBackends[backendType] = ociStorageBackend
+				storageBackends[backendType] = annotationStorageBackend
 
-			case git.StorageBackendGit:
-
-				gitStorageBackend, err := git.NewStorageBackend(appName, appPath, appDirPath, clusterName,
-					appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha)
-				if err != nil {
-					return nil, err
-				}
-				storageBackends[backendType] = gitStorageBackend
 			}
 		}
 	}

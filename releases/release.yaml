@@ -53,10 +53,10 @@ subjects:
 ---
 apiVersion: v1
 data:
-  .dockerconfigjson: UkVQTEFDRSBUSElTCg==
+  pubring.gpg: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
-  name: argocd-interlace-gcr-secret
+  name: keyring-secret
   namespace: argocd-interlace
 type: Opaque
 ---
@@ -65,25 +65,10 @@ data:
   ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
   ARGOCD_NAMESPACE: YXJnb2NkCg==
   ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
+  ARGOCD_PWD: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
   name: argocd-token-secret
-  namespace: argocd-interlace
-type: Opaque
----
-apiVersion: v1
-data:
-  MANIFEST_DEST_NAMESPACE: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_BRANCH: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_MODE: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_SUFFIX: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_TOKEN: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_URL: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_USER: UkVQTEFDRSBUSElTCg==
-  MANIFEST_GITREPO_USEREMAIL: UkVQTEFDRSBUSElTCg==
-kind: Secret
-metadata:
-  name: interlace-manifest-git-secret
   namespace: argocd-interlace
 type: Opaque
 ---
@@ -121,59 +106,19 @@ spec:
         - name: DOCKER_CONFIG
           value: /tmp/.docker/
         - name: MANIFEST_STORAGE_TYPE
-          value: oci
-        - name: OCI_IMAGE_REGISTRY
-          value: gcr.io/<some-registry-name>
-        - name: OCI_IMAGE_PREFIX
-          value: argocd.apps
-        - name: OCI_IMAGE_TAG
-          value: mnf
+          value: annotation
         - name: REKOR_SERVER
           value: https://rekor.sigstore.dev
+        - name: SOURCE_MATERIAL_SIGNATURE
+          value: source-materials.sig
+        - name: SOURCE_MATERIAL_HASH_LIST
+          value: source-materials
+        - name: ALWAYS_GENERATE_PROV
+          value: "true"
         - name: COSIGN_PASSWORD
           value: ""
         - name: MANIFEST_ARGOCD_PROJECT
           value: default
-        - name: MANIFEST_GITREPO_URL
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_URL
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_SUFFIX
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_SUFFIX
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_BRANCH
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_BRANCH
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_TOKEN
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_TOKEN
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_USER
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_USER
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_USEREMAIL
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_USEREMAIL
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_DEST_NAMESPACE
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_DEST_NAMESPACE
-              name: interlace-manifest-git-secret
-        - name: MANIFEST_GITREPO_MODE
-          valueFrom:
-            secretKeyRef:
-              key: MANIFEST_GITREPO_MODE
-              name: interlace-manifest-git-secret
         - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
           value: info
         - name: ARGOCD_INTERLACE_LOG_LEVEL
@@ -193,7 +138,12 @@ spec:
             secretKeyRef:
               key: ARGOCD_TOKEN
               name: argocd-token-secret
-        image: gcr.io/kg-image-registry/argocd-interlace-controller:dev
+        - name: ARGOCD_PWD
+          valueFrom:
+            secretKeyRef:
+              key: ARGOCD_PWD
+              name: argocd-token-secret
+        image: quay.io/gajananan/argocd-interlace-controller:dev
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:
@@ -201,18 +151,16 @@ spec:
           name: output
         - mountPath: /etc/signing-secrets
           name: signing-secrets
-        - mountPath: /tmp/.docker/
-          name: gcr-registry-docker-config
+        - mountPath: /etc/keyring-secret
+          name: keyring-secret
       serviceAccountName: argocd-interlace-controller
       volumes:
       - name: signing-secrets
         secret:
           secretName: signing-secrets
+      - name: keyring-secret
+        secret:
+          secretName: keyring-secret
       - emptyDir: {}
         name: output
-      - name: gcr-registry-docker-config
-        secret:
-          items:
-          - key: .dockerconfigjson
-            path: config.json
-          secretName: argocd-interlace-gcr-secret
+

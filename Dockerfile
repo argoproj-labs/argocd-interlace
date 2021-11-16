@@ -40,8 +40,15 @@ RUN chmod +x /interlace-app/generate_manifest_bundle.sh &&\
 RUN curl -Lo yq https://github.com/mikefarah/yq/releases/download/3.4.0/yq_linux_amd64 &&\
     mv yq /usr/bin/yq &&\
     chmod +x /usr/bin/yq
-
+RUN microdnf install git
 RUN yq -V
+RUN curl -Lo argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 &&\
+    mv argocd /usr/bin/argocd &&\
+    chmod +x /usr/bin/argocd
+
+RUN mkdir -p /.argocd
+
+RUN chgrp -R 0 /.argocd && chmod -R g=u /.argocd
 
 ENTRYPOINT ["argocd-interlace"]
 

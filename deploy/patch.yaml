@@ -4,59 +4,21 @@
     - name: DOCKER_CONFIG
       value: /tmp/.docker/
     - name: MANIFEST_STORAGE_TYPE
-      value: oci #/git/oci
-    - name: OCI_IMAGE_REGISTRY
-      value: gcr.io/<some-registry-name>
-    - name: OCI_IMAGE_PREFIX
-      value: "argocd.apps"
-    - name: OCI_IMAGE_TAG
-      value: "mnf"        
+      value:  annotation      
     - name: REKOR_SERVER
       value: https://rekor.sigstore.dev
+    - name: SOURCE_MATERIAL_SIGNATURE
+      value: "source-materials.sig"
+    - name: SOURCE_MATERIAL_HASH_LIST
+      value: "source-materials"
+    - name: ALWAYS_GENERATE_PROV
+      value: "true"
     - name: COSIGN_PASSWORD
       value: ""
     - name: MANIFEST_ARGOCD_PROJECT
       value: default
-    - name: MANIFEST_GITREPO_URL  
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_URL
-    - name: MANIFEST_GITREPO_SUFFIX
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_SUFFIX
-    - name: MANIFEST_GITREPO_BRANCH
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_BRANCH
-    - name: MANIFEST_GITREPO_TOKEN
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_TOKEN
-    - name: MANIFEST_GITREPO_USER
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_USER
-    - name: MANIFEST_GITREPO_USEREMAIL
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_USEREMAIL
-    - name: MANIFEST_DEST_NAMESPACE
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_DEST_NAMESPACE
-    - name: MANIFEST_GITREPO_MODE
-      valueFrom:
-        secretKeyRef:
-          name: interlace-manifest-git-secret
-          key: MANIFEST_GITREPO_MODE
+    - name: SIGNATURE_RSC_ANNOTATION
+      value: "argocd.interlace.dev/signature-resource" 
     - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
       value: info
     - name: ARGOCD_INTERLACE_LOG_LEVEL
@@ -76,3 +38,8 @@
         secretKeyRef:
           name: argocd-token-secret
           key: ARGOCD_TOKEN
+    - name: ARGOCD_PWD
+      valueFrom:
+        secretKeyRef:
+          name: argocd-token-secret
+          key: ARGOCD_PWD

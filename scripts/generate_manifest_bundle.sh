@@ -15,8 +15,8 @@
 # limitations under the License.
 
 CMDNAME=`basename $0`
-if [ $# -ne 4 ]; then
-  echo "Usage: $CMDNAME <signed-manifest> <provenance> <name> <output-file>" 1>&2
+if [ $# -ne 5 ]; then
+  echo "Usage: $CMDNAME <signed-manifest> <provenance> <name> <output-file> <annotation>" 1>&2
   exit 1
 fi
 
@@ -25,17 +25,15 @@ SIGNED_MANIFEST=$1
 PROVENANCE_FILE=$2
 NAME=$3
 OUTPUT_FILE=$4
+base_cm=$5
 
 if [ -f $OUTPUT_FILE ]; then
    rm $OUTPUT_FILE
 fi
 
-base_cm='{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":""},"data": {} }'
+
 
 YQ_VERSION=$(yq --version 2>&1 | awk '{print $3}' | cut -c 1 )
-
-#echo $YQ_VERSION
-#echo $base_cm
 
 if [[ $YQ_VERSION == "3" ]]; then
   echo -e $base_cm | yq r - --prettyPrint >> "$OUTPUT_FILE"
