@@ -82,7 +82,7 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		resourceName := obj.GetName()
 		namespace := obj.GetNamespace()
 		resourceAnnotatons := obj.GetAnnotations()
-		resourceLabels := obj.GetLabels()
+
 		log.Info("kind :", kind, " resourceName ", resourceName, " namespace", namespace)
 		log.Info("resourceAnnotatons ", resourceAnnotatons)
 		interlaceConfig, err := config.GetInterlaceConfig()
@@ -90,8 +90,6 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		isSignatureresource := false
 		if rscAnnotation, ok := resourceAnnotatons[interlaceConfig.SignatureResourceAnnotation]; ok {
 			isSignatureresource, _ = strconv.ParseBool(rscAnnotation)
-		} else if rscLabel, ok := resourceLabels[interlaceConfig.SignatureResourceLabel]; ok {
-			isSignatureresource, _ = strconv.ParseBool(rscLabel)
 		}
 
 		log.Info("isSignatureresource :", isSignatureresource)

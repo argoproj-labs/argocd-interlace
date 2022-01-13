@@ -305,6 +305,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 				log.Errorf("Error in storing manifest provenance: %s", err.Error())
 				return err
 			}
+
 		} else {
 			if manifestGenerated {
 				err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)

@@ -42,7 +42,6 @@ type InterlaceConfig struct {
 	SourceMaterialSignature     string
 	AlwaysGenerateProv          bool
 	SignatureResourceAnnotation string
-	SignatureResourceLabel      string
 }
 
 var instance *InterlaceConfig
@@ -114,12 +113,6 @@ func newConfig() (*InterlaceConfig, error) {
 		return nil, fmt.Errorf("SIGNATURE_RSC_ANNOTATION is empty, please specify in configuration !")
 	}
 
-	signRscLabel := os.Getenv("SIGNATURE_RSC_LABEL")
-
-	if signRscLabel == "" {
-		return nil, fmt.Errorf("SIGNATURE_RSC_LABEL is empty, please specify in configuration !")
-	}
-
 	config := &InterlaceConfig{
 		LogLevel:                    logLevel,
 		ManifestStorageType:         manifestStorageType,
@@ -132,7 +125,6 @@ func newConfig() (*InterlaceConfig, error) {
 		SourceMaterialSignature:     sourceHashSignature,
 		AlwaysGenerateProv:          alwayGenProv,
 		SignatureResourceAnnotation: signRscAnnot,
-		SignatureResourceLabel:      signRscLabel,
 	}
 
 	if manifestStorageType == "annotation" {
