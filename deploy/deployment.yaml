@@ -28,7 +28,7 @@ spec:
             - name: signing-secrets
               mountPath: /etc/signing-secrets
             - name: keyring-secret
-              mountPath: /etc/keyring-secret
+              mountPath: /.gnupg/
       volumes:
         - name: signing-secrets
           secret:

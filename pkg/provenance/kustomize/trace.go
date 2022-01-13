@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-package provenance
+package kustomize
 
 import (
 	"encoding/base64"

@@ -41,10 +41,20 @@ RUN curl -Lo yq https://github.com/mikefarah/yq/releases/download/3.4.0/yq_linux
     mv yq /usr/bin/yq &&\
     chmod +x /usr/bin/yq
 RUN microdnf install git
+
+RUN microdnf install tar gzip
 RUN yq -V
 RUN curl -Lo argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 &&\
     mv argocd /usr/bin/argocd &&\
     chmod +x /usr/bin/argocd
+
+RUN curl -Lo helm-v3.7.2-linux-amd64.tar.gz https://get.helm.sh/helm-v3.7.2-linux-amd64.tar.gz &&\
+    tar -zxvf helm-v3.7.2-linux-amd64.tar.gz &&\
+    mv linux-amd64/helm /usr/local/bin/helm
+
+RUN curl -Lo helm-sigstore https://github.com/sigstore/helm-sigstore/releases/download/v0.1.3/helm-sigstore-linux-amd64  &&\
+    helm plugin install https://github.com/sigstore/helm-sigstore  &&\
+    helm plugin list
 
 RUN mkdir -p /.argocd
 
