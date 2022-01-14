@@ -53,7 +53,7 @@ func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog b
 	helmChart := fmt.Sprintf("%s-%s.tgz", chart, appSourceRevision)
 	recipe := in_toto.ProvenanceRecipe{
 		EntryPoint: entryPoint,
-		Arguments:  []string{appName + "  " + helmChart},
+		Arguments:  []string{chart + "  " + helmChart},
 	}
 
 	subjects := []in_toto.Subject{}
@@ -106,7 +106,7 @@ func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog b
 }
 
 func (p Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
-	appName := p.appData.AppName
+
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 	appSourceRevision := p.appData.AppSourceRevision
@@ -122,13 +122,14 @@ func (p Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
 		Digest: in_toto.DigestSet{
 			"sha256hash": chartHash,
 			"revision":   appSourceRevision,
-			"name":       appName,
+			"name":       chart,
 		},
 	})
 
 	materials = append(materials, in_toto.ProvenanceMaterial{
-		URI: "values",
+
 		Digest: in_toto.DigestSet{
+			"material":   "values",
 			"parameters": values,
 		},
 	})
@@ -146,31 +147,31 @@ func (p Provenance) VerifySourceMaterial() (bool, error) {
 	_, err := utils.CmdExec(mkDirCmd, "", appPath)
 	helmChartUrl := fmt.Sprintf("%s/%s-%s.tgz", repoUrl, chart, targetRevision)
 
-	output := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
+	chartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
 	curlCmd := "curl"
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartUrl, "--output", output)
+	_, err = utils.CmdExec(curlCmd, appPath, helmChartUrl, "--output", chartPath)
 	if err != nil {
-		log.Infof("[INFO]: Curl Helm Chart CmdExec download : %s ", err.Error())
+		log.Infof("Retrive Helm Chart : %s ", err.Error())
 		return false, err
 	}
 
 	helmChartProvUrl := fmt.Sprintf("%s/%s-%s.tgz.prov", repoUrl, chart, targetRevision)
-	output = fmt.Sprintf("%s/%s-%s.tgz.prov", appPath, chart, targetRevision)
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartProvUrl, "--output", output)
+	provPath := fmt.Sprintf("%s/%s-%s.tgz.prov", appPath, chart, targetRevision)
+	_, err = utils.CmdExec(curlCmd, appPath, helmChartProvUrl, "--output", provPath)
 	if err != nil {
-		log.Infof("[INFO]: Curl Helm Chart Prov CmdExec download : %s ", err.Error())
+		log.Infof("Retrive Helm Chart Prov : %s ", err.Error())
 		return false, err
 	}
 
 	helmCmd := "helm"
-	output = fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
-	_, err = utils.CmdExec(helmCmd, appPath, "sigstore", "verify", output)
+
+	_, err = utils.CmdExec(helmCmd, appPath, "sigstore", "verify", chartPath)
 	if err != nil {
-		log.Infof("[INFO]: Helm Sigstore verify CmdExec add : %s ", err.Error())
+		log.Infof("Helm-sigstore verify : %s ", err.Error())
 		return false, err
 	}
 
-	log.Infof("[INFO]: Helm sigstore verify was successful for the  Helm chart: %s ", p.appData.AppName)
+	log.Infof("[INFO]: Helm sigstore verify was successful for the  Helm chart: %s ", p.appData.Chart)
 
 	return true, nil
 

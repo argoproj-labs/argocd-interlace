@@ -68,7 +68,6 @@ func CreateEventHandler(app *appv1.Application) error {
 		version = app.Spec.Source.Helm.Version
 		log.Info("len(valueFiles)", len(valueFiles))
 		log.Info("releaseName", releaseName)
-		log.Info("values", values)
 		log.Info("version", version)
 
 	} else {
@@ -173,7 +172,6 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 			version = newApp.Spec.Source.Helm.Version
 			log.Info("len(valueFiles)", len(valueFiles))
 			log.Info("releaseName", releaseName)
-			log.Info("values", values)
 			log.Info("version", version)
 			appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
 		} else {
@@ -186,9 +184,10 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
 			chart, isHelm, valueFiles, releaseName, values, version)
 
+		log.Infof("[INFO][%s]: Interlace detected update of an exsiting Application resource: %s", appName, appName)
+
 		if isHelm {
 
-			log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
 			prov, _ := helmprov.NewProvenance(*appData)
 			sourceVerified, err = prov.VerifySourceMaterial()
 			if err != nil {
@@ -237,8 +236,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 	}
 
 	storageBackend := allStorageBackEnds[manifestStorageType]
-	log.Info("manifestStorageType ", manifestStorageType)
-	log.Info("storageBackend ", storageBackend)
+
 	if storageBackend != nil {
 
 		manifestGenerated := false
@@ -249,7 +247,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 		log.Info("buildStartedOn:", buildStartedOn, " loc ", loc)
 
 		if created {
-			log.Info("created scenario")
+
 			log.Infof("[INFO][%s] Interlace downloads desired manifest from ArgoCD REST API", appData.AppName)
 			manifestGenerated, err = manifest.GenerateInitialManifest(appData)
 			if err != nil {
@@ -257,7 +255,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 				return err
 			}
 		} else {
-			log.Info("update scenario")
+
 			log.Infof("[INFO][%s] Interlace downloads desired manifest from ArgoCD REST API", appData.AppName)
 			yamlBytes, err := storageBackend.GetLatestManifestContent()
 			if err != nil {

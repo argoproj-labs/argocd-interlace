@@ -42,8 +42,7 @@ func ApplyResourcePatch(kind, resourceName, namespace, appName string, patches [
 	})
 
 	if result == true {
-		log.Info("result:", result)
-		log.Info("Patching completed")
+		log.Info("Patching completed result: %s", result)
 	}
 	return nil
 }
@@ -77,10 +76,10 @@ func loginArgoCDAPI() error {
 
 	_, err = CmdExec(argocdCmd, "", "login", argoserver, "--insecure", "--username", "admin", "--password", argocdPwd)
 	if err != nil {
-		log.Infof("Error: CmdExec argocd login : %s ", err.Error())
+		log.Infof("Error in executing argocd login : %s ", err.Error())
 		return err
 	}
-	log.Infof(" CmdExec argocd login succeeded")
+	log.Infof(" Executing argocd login succeeded")
 	return nil
 }
 
@@ -98,12 +97,12 @@ func patchResource(kind, resourceName, namespace, appName string, patches []stri
 			"--patch", patch,
 		)
 		if err != nil {
-			log.Infof("Error:   CmdExec argocd apply patch : %s ", err.Error())
+			log.Infof("Error in executing argocd apply patch : %s ", err.Error())
 			return false
 		}
 
 	}
-	log.Infof(" CmdExec argocd patches succeeded")
+	log.Infof(" Applying argocd patches succeeded")
 	return true
 
 }

@@ -69,12 +69,14 @@ func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog b
 
 	url := host + orgRepo + gitSuff
 	log.Info("url:", url)
+
 	r, err := GetTopGitRepo(url)
 
 	if err != nil {
 		log.Errorf("Error git clone:  %s", err.Error())
 		return err
 	}
+
 	log.Info("r.RootDir ", r.RootDir, "appPath ", appPath)
 
 	baseDir := filepath.Join(r.RootDir, appPath)
@@ -86,7 +88,6 @@ func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog b
 	}
 
 	provBytes, err := json.Marshal(prov)
-	log.Infof(": prov: %s ", string(provBytes))
 
 	subjects := []in_toto.Subject{}
 
@@ -153,6 +154,7 @@ func (p Provenance) VerifySourceMaterial() (bool, error) {
 	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
 
 	log.Info("appSourceRepoUrl ", appSourceRepoUrl)
+
 	log.Info("host:", host, " orgRepo:", orgRepo, " path:", path, " gitRef:", gitRef, " gitSuff:", gitSuff)
 
 	url := host + orgRepo + gitSuff

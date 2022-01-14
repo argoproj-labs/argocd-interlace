@@ -118,8 +118,6 @@ func checkDiff(targetObjYAMLBytes []byte, manifestYAMLs [][]byte) (bool, error) 
 
 	objNode, err := mapnode.NewFromBytes(targetObjYAMLBytes) // json
 
-	log.Debug("targetObjYAMLBytes ", string(targetObjYAMLBytes))
-
 	if err != nil {
 		log.Errorf("objNode error from NewFromYamlBytes %s", err.Error())
 		return false, err

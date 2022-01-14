@@ -61,14 +61,14 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
-		log.Errorf("Error in signing bundle image: %s", err.Error())
+		log.Errorf("Error in signing manifest: %s", err.Error())
 		return err
 	}
 
-	log.Info("signedBytes: ", string(signedBytes))
-
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
+
 	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
+
 	var annotations map[string]string
 	for _, item := range manifestYAMLs {
 
@@ -81,21 +81,23 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		kind := obj.GetKind()
 		resourceName := obj.GetName()
 		namespace := obj.GetNamespace()
-		resourceAnnotatons := obj.GetAnnotations()
+
+		resourceLabels := obj.GetLabels()
 
 		log.Info("kind :", kind, " resourceName ", resourceName, " namespace", namespace)
-		log.Info("resourceAnnotatons ", resourceAnnotatons)
 		interlaceConfig, err := config.GetInterlaceConfig()
 
 		isSignatureresource := false
-		if rscAnnotation, ok := resourceAnnotatons[interlaceConfig.SignatureResourceAnnotation]; ok {
-			isSignatureresource, _ = strconv.ParseBool(rscAnnotation)
+		log.Info("resourceLabels ", resourceLabels)
+
+		if rscLabel, ok := resourceLabels[interlaceConfig.SignatureResourceLabel]; ok {
+			isSignatureresource, _ = strconv.ParseBool(rscLabel)
 		}
 
 		log.Info("isSignatureresource :", isSignatureresource)
 
 		if isSignatureresource {
-			log.Info("Going to patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
+			log.Info("Patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
 
 			annotations = k8smnfutil.GetAnnotationsInYAML(item)
 
@@ -106,9 +108,6 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 				signature = annotations[utils.SIG_ANNOTATION_NAME]
 			}
 
-			log.Info("message: ", message)
-			log.Info("signature: ", signature)
-
 			patchData, err := preparePatch(message, signature, kind)
 			if err != nil {
 				log.Errorf("Error in creating patch for application resource config: %s", err.Error())
@@ -116,7 +115,6 @@ func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 			}
 
 			log.Info("len(patchData)", len(patchData))
-			log.Info("patchData)", patchData)
 
 			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
