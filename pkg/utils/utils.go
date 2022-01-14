@@ -46,7 +46,7 @@ const (
 	TMP_DIR                   = "/tmp/output"
 	PRIVATE_KEY_PATH          = "/etc/signing-secrets/cosign.key"
 	PUB_KEY_PATH              = "/etc/signing-secrets/cosign.pub"
-	KEYRING_PUB_KEY_PATH      = "/etc/keyring-secret/pubring.gpg"
+	KEYRING_PUB_KEY_PATH      = "/.gnupg/pubring.gpg"
 	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
 	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
 	RETRY_ATTEMPTS            = 10

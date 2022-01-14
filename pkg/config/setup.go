@@ -26,22 +26,22 @@ import (
 )
 
 type InterlaceConfig struct {
-	LogLevel                    string
-	ManifestStorageType         string
-	ArgocdNamespace             string
-	ArgocdApiBaseUrl            string
-	ArgocdServer                string
-	ArgocdApiToken              string
-	ArgocdPwd                   string
-	RekorServer                 string
-	RekorTmpDir                 string
-	ManifestAppSetMode          string
-	ManifestArgocdProj          string
-	ManifestSuffix              string
-	SourceMaterialHashList      string
-	SourceMaterialSignature     string
-	AlwaysGenerateProv          bool
-	SignatureResourceAnnotation string
+	LogLevel                string
+	ManifestStorageType     string
+	ArgocdNamespace         string
+	ArgocdApiBaseUrl        string
+	ArgocdServer            string
+	ArgocdApiToken          string
+	ArgocdPwd               string
+	RekorServer             string
+	RekorTmpDir             string
+	ManifestAppSetMode      string
+	ManifestArgocdProj      string
+	ManifestSuffix          string
+	SourceMaterialHashList  string
+	SourceMaterialSignature string
+	AlwaysGenerateProv      bool
+	SignatureResourceLabel  string
 }
 
 var instance *InterlaceConfig
@@ -107,24 +107,24 @@ func newConfig() (*InterlaceConfig, error) {
 	}
 	alwayGenProv, _ := strconv.ParseBool(alwaysGenerateProv)
 
-	signRscAnnot := os.Getenv("SIGNATURE_RSC_ANNOTATION")
+	signRscLabel := os.Getenv("SIGNATURE_RSC_LABEL")
 
-	if signRscAnnot == "" {
-		return nil, fmt.Errorf("SIGNATURE_RSC_ANNOTATION is empty, please specify in configuration !")
+	if signRscLabel == "" {
+		return nil, fmt.Errorf("SIGNATURE_RSC_LABEL is empty, please specify in configuration !")
 	}
 
 	config := &InterlaceConfig{
-		LogLevel:                    logLevel,
-		ManifestStorageType:         manifestStorageType,
-		ArgocdNamespace:             argocdNamespace,
-		ArgocdApiBaseUrl:            strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
-		ArgocdServer:                strings.TrimSuffix(argocdServer, "\n"),
-		ArgocdApiToken:              strings.TrimSuffix(argocdApiToken, "\n"),
-		ArgocdPwd:                   strings.TrimSuffix(argocdPwd, "\n"),
-		SourceMaterialHashList:      sourceHashList,
-		SourceMaterialSignature:     sourceHashSignature,
-		AlwaysGenerateProv:          alwayGenProv,
-		SignatureResourceAnnotation: signRscAnnot,
+		LogLevel:                logLevel,
+		ManifestStorageType:     manifestStorageType,
+		ArgocdNamespace:         argocdNamespace,
+		ArgocdApiBaseUrl:        strings.TrimSuffix(argocdApiBaseUrl, "\n") + "/api/v1/applications",
+		ArgocdServer:            strings.TrimSuffix(argocdServer, "\n"),
+		ArgocdApiToken:          strings.TrimSuffix(argocdApiToken, "\n"),
+		ArgocdPwd:               strings.TrimSuffix(argocdPwd, "\n"),
+		SourceMaterialHashList:  sourceHashList,
+		SourceMaterialSignature: sourceHashSignature,
+		AlwaysGenerateProv:      alwayGenProv,
+		SignatureResourceLabel:  signRscLabel,
 	}
 
 	if manifestStorageType == "annotation" {

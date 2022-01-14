@@ -15,10 +15,12 @@
       value: "true"
     - name: COSIGN_PASSWORD
       value: ""
+    - name: COSIGN_EXPERIMENTAL
+      value: "1"
     - name: MANIFEST_ARGOCD_PROJECT
       value: default
-    - name: SIGNATURE_RSC_ANNOTATION
-      value: "argocd.interlace.dev/signature-resource" 
+    - name: SIGNATURE_RSC_LABEL
+      value: ""
     - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
       value: info
     - name: ARGOCD_INTERLACE_LOG_LEVEL
@@ -43,3 +45,5 @@
         secretKeyRef:
           name: argocd-token-secret
           key: ARGOCD_PWD
+    - name: HELM_PLUGINS
+      value: /root/.local/share/helm/plugins

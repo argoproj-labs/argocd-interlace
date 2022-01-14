@@ -1,4 +1,4 @@
-### Confgiure source materials
+### Configure source materials
 
 ArgoCD Interlace requires a user to 
 

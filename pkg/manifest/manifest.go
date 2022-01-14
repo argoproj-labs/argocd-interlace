@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/IBM/argocd-interlace/pkg/application"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/mapnode"
@@ -30,7 +31,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func GenerateInitialManifest(appName, appPath, appDirPath string) (bool, error) {
+func GenerateInitialManifest(appData application.ApplicationData) (bool, error) {
+
+	appName := appData.AppName
+
+	appDirPath := appData.AppDirPath
 
 	// Retrive the desired state of manifest via argocd API call
 	desiredManifest, err := utils.RetriveDesiredManifest(appName)
@@ -63,7 +68,7 @@ func GenerateInitialManifest(appName, appPath, appDirPath string) (bool, error) 
 	return false, nil
 }
 
-func GenerateManifest(appName, appDirPath string, yamlBytes []byte) (bool, error) {
+func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bool, error) {
 
 	diffCount := 0
 	finalManifest := ""
@@ -71,7 +76,7 @@ func GenerateManifest(appName, appDirPath string, yamlBytes []byte) (bool, error
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(yamlBytes)
 
 	// Retrive the desired state of manifest via argocd API call
-	desiredManifest, err := utils.RetriveDesiredManifest(appName)
+	desiredManifest, err := utils.RetriveDesiredManifest(appData.AppName)
 	if err != nil {
 		log.Errorf("Error in retriving desired manifest : %s", err.Error())
 		return false, err
@@ -98,7 +103,7 @@ func GenerateManifest(appName, appDirPath string, yamlBytes []byte) (bool, error
 	}
 
 	if finalManifest != "" {
-		err := utils.WriteToFile(string(finalManifest), appDirPath, utils.MANIFEST_FILE_NAME)
+		err := utils.WriteToFile(string(finalManifest), appData.AppDirPath, utils.MANIFEST_FILE_NAME)
 		if err != nil {
 			log.Errorf("Error in writing manifest to file: %s", err.Error())
 			return false, err
@@ -112,8 +117,6 @@ func GenerateManifest(appName, appDirPath string, yamlBytes []byte) (bool, error
 func checkDiff(targetObjYAMLBytes []byte, manifestYAMLs [][]byte) (bool, error) {
 
 	objNode, err := mapnode.NewFromBytes(targetObjYAMLBytes) // json
-
-	log.Debug("targetObjYAMLBytes ", string(targetObjYAMLBytes))
 
 	if err != nil {
 		log.Errorf("objNode error from NewFromYamlBytes %s", err.Error())

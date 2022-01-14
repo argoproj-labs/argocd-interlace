@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-package provenance
+package kustomize
 
 import (
 	"encoding/base64"
@@ -217,7 +217,7 @@ func GetTopGitRepo(url string) (*GitRepoResult, error) {
 
 	cDir, err := NewTmpConfirmedDir()
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo NewTmpConfirmedDir : %s ", err.Error())
+		log.Errorf("Error in creating temporary directory: %s", err.Error())
 		return nil, err
 	}
 
@@ -225,30 +225,30 @@ func GetTopGitRepo(url string) (*GitRepoResult, error) {
 
 	_, err = utils.CmdExec(gitCmd, r.RootDir, "init")
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo  CmdExec init : %s ", err.Error())
+		log.Errorf("Error in executing git init: %s", err.Error())
 		return nil, err
 	}
 	_, err = utils.CmdExec(gitCmd, r.RootDir, "remote", "add", "origin", r.URL)
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo CmdExec add : %s ", err.Error())
+		log.Errorf("Error in executing git remote add: %s", err.Error())
 		return nil, err
 	}
 	rev := "HEAD"
 
 	_, err = utils.CmdExec(gitCmd, r.RootDir, "fetch", "--depth=1", "origin", rev)
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo CmdExec fetch : %s ", err.Error())
+		log.Errorf("Error in executing git fetch: %s", err.Error())
 		return nil, err
 	}
 	_, err = utils.CmdExec(gitCmd, r.RootDir, "checkout", "FETCH_HEAD")
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo CmdExec checkout : %s ", err.Error())
+		log.Errorf("Error in executing git checkout: %s", err.Error())
 		return nil, err
 	}
 
 	commitGetOut, err := utils.CmdExec(gitCmd, r.RootDir, "rev-parse", "FETCH_HEAD")
 	if err != nil {
-		log.Infof("[INFO]: GetTopGitRepo CmdExec rev-parse : %s ", err.Error())
+		log.Errorf("Error in executing git rev-parse: %s", err.Error())
 		return nil, err
 	}
 	r.CommitID = strings.TrimSuffix(commitGetOut, "\n")
