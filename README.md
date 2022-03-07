@@ -51,7 +51,7 @@ $ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
 time="2022-03-07T09:01:32Z" level=info msg="[INFO][sample-app] Created entry at index 1579738, available at: https://rekor.sigstore.dev/api/v1/log/entries/7ab813bb62f0d87ad7191856bd12fb8b640ca75a797169265cdc813bb435108f\n"
 ```
 
-### Setup
+### Customize Settings
 
 To customize settings of ArgoCD Interlace, you can follow these documents:
 * [ArgoCD REST API authentication for querying ArgoCD REST API to retrive desired manifest for an application](docs/argo_setup.md)
