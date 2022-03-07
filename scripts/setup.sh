@@ -86,7 +86,7 @@ if [ ! -f $pubringName ]; then
 fi
 
 # configure `keyring-secret`
-kubectl patch secret keyring-secret -n argocd-interlace -p="{\"data\":{\"pubring.gpg\":\"$(cat pubring.gpg | base64)\"}}"
+kubectl patch secret keyring-secret -n argocd-interlace -p="{\"data\":{\"pubring.gpg\":\"$(cat $pubringName | base64)\"}}"
 
 # restart argocd interlace pod
 kubectl scale deploy argocd-interlace-controller -n argocd-interlace --replicas=0
