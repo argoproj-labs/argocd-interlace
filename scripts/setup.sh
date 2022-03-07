@@ -3,6 +3,7 @@
 set -e
 
 ARGOCD_NAMESPACE=$1
+USE_SAMPLE_PUBLIC_KEY=$2
 
 if ! [ -x "$(command -v kubectl)" ]; then
     echo 'Error: kubectl is not installed.' >&2
@@ -69,12 +70,17 @@ fi
 # configure `signing-secrets`
 kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.key\":\"$(cat cosign.key | base64)\",\"cosign.pub\":\"$(cat cosign.pub | base64)\"}}"
 
-if [ ! -f pubring.gpg ]; then
-    gpg --export --output pubring.gpg
+pubringName="pubring.gpg"
+if [[ $USE_SAMPLE_PUBLIC_KEY == "true" ]]; then
+    pubringName="sample-pubring.gpg"
+fi
+
+if [ ! -f $pubringName ]; then
+    gpg --export --output $pubringName
 fi
 
 # configure `keyring-secret`
-kubectl patch secret keyring-secret -n argocd-interlace -p="{\"data\":{\"pubring.gpg\":\"$(cat pubring.gpg | base64)\"}}"
+kubectl patch secret keyring-secret -n argocd-interlace -p="{\"data\":{\"pubring.gpg\":\"$(cat $pubringName | base64)\"}}"
 
 # restart argocd interlace pod
 kubectl scale deploy argocd-interlace-controller -n argocd-interlace --replicas=0
