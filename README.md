@@ -20,11 +20,13 @@ The features are
 Prerequisite: Install [ArgoCD](https://argo-cd.readthedocs.io/en/stable/getting_started/) on your Kubernetes cluster before you install ArgoCD Interlace.
 
 
-To install the latest version of ArgoCD Interlace to your cluster, run:
+To install ArgoCD Interlace, run:
 ```
-kubectl apply --filename https://raw.githubusercontent.com/IBM/argocd-interlace/main/releases/release.yaml
+$ git clone https://github.com/IBM/argocd-interlace.git
+$ cd argocd-interlace
+$ make deploy
 ```
-This creates a default installation of ArgoCD Interlace, however you will need futher setup for seeing it in action.
+This automates install and setup with default configuration.
 
 To verify that installation was successful, ensure Status of pod `argocd-interlace-controller` become `Running`:
 ```shell
@@ -33,9 +35,25 @@ NAME                                              READY   STATUS    RESTARTS   A
 pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          19m
 ```
 
+### Usage
+
+To try ArgoCD Interlace, you can deploy the sample Application:
+```
+$ kubectl create -f examples/signed-application.yaml
+```
+
+Then you can see the provenance record ID and its URL in the log.
+```
+$ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
+
+...
+
+time="2022-03-07T09:01:32Z" level=info msg="[INFO][sample-app] Created entry at index 1579738, available at: https://rekor.sigstore.dev/api/v1/log/entries/7ab813bb62f0d87ad7191856bd12fb8b640ca75a797169265cdc813bb435108f\n"
+```
+
 ### Setup
 
-To complete setting up ArgoCD Interlace, configure secrets for:
+To customize settings of ArgoCD Interlace, you can follow these documents:
 * [ArgoCD REST API authentication for querying ArgoCD REST API to retrive desired manifest for an application](docs/argo_setup.md)
 * [Configuring source material repository](docs/configure_source_materials.md)
 * [Signing source materials](docs/configure_source_materials.md)
