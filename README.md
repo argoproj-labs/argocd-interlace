@@ -37,9 +37,12 @@ pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          1
 
 ### Usage
 
-To try ArgoCD Interlace, you can deploy the sample Application:
+To try ArgoCD Interlace, you can use the example Application inside `examples` directory:
 ```
 $ kubectl create -f examples/signed-application.yaml
+
+(Note that public key must be the sample one to verify the example correctly. You can setup it by: )
+$ make deploy USE_SAMPLE_PUBLIC_KEY=true
 ```
 
 Then you can see the provenance record ID and its URL in the log.
