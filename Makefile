@@ -2,8 +2,11 @@ IMG_NAME=ghcr.io/hirokuni-kitahara/argocd-interlace-controller
 
 ARGOCD_NAMESPACE ?= argocd
 
+<<<<<<< HEAD
 USE_EXAMPLE_KEYS ?= false
 
+=======
+>>>>>>> e13053e (update installation)
 VERSION=dev
 TMP_DIR=/tmp/
 
