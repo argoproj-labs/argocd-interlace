@@ -53,22 +53,21 @@ subjects:
 ---
 apiVersion: v1
 data:
-  pubring.gpg: UkVQTEFDRSBUSElTCg==
+  ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
+  ARGOCD_NAMESPACE: YXJnb2NkCg==
+  ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
-  name: keyring-secret
+  name: argocd-token-secret
   namespace: argocd-interlace
 type: Opaque
 ---
 apiVersion: v1
 data:
-  ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
-  ARGOCD_NAMESPACE: YXJnb2NkCg==
-  ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
-  ARGOCD_PWD: UkVQTEFDRSBUSElTCg==
+  pubring.gpg: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
-  name: argocd-token-secret
+  name: keyring-secret
   namespace: argocd-interlace
 type: Opaque
 ---
@@ -117,8 +116,12 @@ spec:
           value: "true"
         - name: COSIGN_PASSWORD
           value: ""
+        - name: COSIGN_EXPERIMENTAL
+          value: "1"
         - name: MANIFEST_ARGOCD_PROJECT
           value: default
+        - name: SIGNATURE_RSC_LABEL
+          value: isSignatureResource
         - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
           value: info
         - name: ARGOCD_INTERLACE_LOG_LEVEL
@@ -143,7 +146,9 @@ spec:
             secretKeyRef:
               key: ARGOCD_PWD
               name: argocd-token-secret
-        image: quay.io/gajananan/argocd-interlace-controller:dev
+        - name: HELM_PLUGINS
+          value: /root/.local/share/helm/plugins
+        image: ghcr.io/hirokuni-kitahara/argocd-interlace-controller:dev
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:
@@ -151,7 +156,7 @@ spec:
           name: output
         - mountPath: /etc/signing-secrets
           name: signing-secrets
-        - mountPath: /etc/keyring-secret
+        - mountPath: /.gnupg/
           name: keyring-secret
       serviceAccountName: argocd-interlace-controller
       volumes:
@@ -163,4 +168,3 @@ spec:
           secretName: keyring-secret
       - emptyDir: {}
         name: output
-

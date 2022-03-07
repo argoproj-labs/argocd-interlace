@@ -1,2 +1,5 @@
 build/
 rekor/
+cosign.pub
+cosign.key
+pubring.gpg
