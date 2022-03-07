@@ -22,7 +22,7 @@ fi
 
 if ! [ -x "$(command -v cosign)" ]; then
     # try installing by go install command 
-    go install github.com/sigstore/cosign/cmd/cosign@latest || true
+    go install github.com/sigstore/cosign/cmd/cosign@v1.5.2 || true
     if ! [ -x "$(command -v cosign)" ]; then
         echo 'Error: cosign is not installed.' >&2
         exit 1
