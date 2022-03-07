@@ -37,7 +37,7 @@ check-argocd:
 		echo "ArgoCD pod is found."; \
 	else \
 		echo "ArgoCD pods are not running in \"$(ARGOCD_NAMESPACE)\" namespace."; \
-		echo "ArgoCD is a prerequisite for argocd-interlace."
+		echo "ArgoCD is a prerequisite for argocd-interlace."; \
 		exit 1; \
     fi
 	
