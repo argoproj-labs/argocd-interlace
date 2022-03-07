@@ -20,7 +20,7 @@
     - name: MANIFEST_ARGOCD_PROJECT
       value: default
     - name: SIGNATURE_RSC_LABEL
-      value: ""
+      value: "isSignatureResource"
     - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
       value: info
     - name: ARGOCD_INTERLACE_LOG_LEVEL

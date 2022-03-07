@@ -1,49 +1,48 @@
-NAME=quay.io/gajananan/argocd-interlace-controller
+IMG_NAME=ghcr.io/hirokuni-kitahara/argocd-interlace-controller
+
+ARGOCD_NAMESPACE ?= argocd
+
+USE_SAMPLE_PUBLIC_KEY ?= false
 
 VERSION=dev
 TMP_DIR=/tmp/
 
-.PHONY: build build-cli build-core, deploy, delete
-
-build-linux:
-	@echo building binary for image
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
-	@echo building image
-	docker build -t $(NAME):$(VERSION) .
-	docker push $(NAME):$(VERSION)
-	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(NAME):$(VERSION)
-
-build-image:
-	@echo building image
-	docker build -t $(NAME):$(VERSION) .
-	docker push $(NAME):$(VERSION)
-	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(NAME):$(VERSION)
+.PHONY: build deploy undeploy check-argocd
 
 build:
 	@echo building binary for image
-	CGO_ENABLED=0  GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
-	#@echo building image
-	#docker build -t $(NAME):$(VERSION) .
-	#docker push $(NAME):$(VERSION)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
+	@echo building image
+	docker build -t $(IMG_NAME):$(VERSION) .
+	docker push $(IMG_NAME):$(VERSION)
+	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(VERSION)
 
-
-build-core-linux:
-	@echo building binary for core
-	CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
-
-build-core:
-	@echo building binary for core
-	CGO_ENABLED=0 GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
-
-deploy-argocd-interlace:
+deploy: check-argocd
+	@echo ---------------------------------
 	@echo deploying argocd-interlace
+	@echo ---------------------------------
 	kustomize build deploy | kubectl apply -f -
-	#kubectl apply -f argo-token-secret.yaml -n argocd-interlace
+	@echo ---------------------------------
+	@echo configuring argocd-interlace
+	@echo ---------------------------------
+	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(USE_SAMPLE_PUBLIC_KEY)
+	@echo ---------------------------------
+	@echo done!
 
-delete-argocd-interlace:
+undeploy:
 	@echo deleting argocd-interlace
 	kustomize build deploy | kubectl delete -f -
 
+check-argocd:
+	@podnum=$$(kubectl get pod -n $(ARGOCD_NAMESPACE) | grep application-controller-0 | grep Running | wc -l) && \
+	if [ $$podnum -eq 1 ]; then \
+		echo "ArgoCD pod is found."; \
+	else \
+		echo "ArgoCD pods are not running in \"$(ARGOCD_NAMESPACE)\" namespace."; \
+		echo "ArgoCD is a prerequisite for argocd-interlace."; \
+		exit 1; \
+    fi
+	
 
 lint-init:
 	 golangci-lint run --timeout 5m -D errcheck,unused,gosimple,deadcode,staticcheck,structcheck,ineffassign,varcheck > $(TMP_DIR)lint_results_interlace.txt

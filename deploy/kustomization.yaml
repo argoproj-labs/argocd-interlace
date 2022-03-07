@@ -1,9 +1,10 @@
 resources:
     - namespace.yaml
+    - service_account.yaml
     - role.yaml
     - role_binding.yaml
     - deployment.yaml
-    - service_account.yaml
+    - secrets.yaml
 
 patchesJson6902:
 - target:
