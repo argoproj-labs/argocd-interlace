@@ -93,7 +93,7 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			app, ok := obj.(*appv1.Application)
 
 			if ok {
-				err := interlace.CreateEventHandler(app)
+				err := interlace.CreateEventHandler(app, applicationClientset)
 				if err != nil {
 					log.Errorf("Error in handling create event: %s", err.Error())
 				}
@@ -112,7 +112,7 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			oldApp, oldOK := old.(*appv1.Application)
 			newApp, newOK := new.(*appv1.Application)
 			if oldOK && newOK {
-				err := interlace.UpdateEventHandler(oldApp, newApp)
+				err := interlace.UpdateEventHandler(oldApp, newApp, applicationClientset)
 				if err != nil {
 					log.Errorf("Error in handling update event: %s", err.Error())
 				}

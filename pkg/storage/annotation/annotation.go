@@ -24,6 +24,7 @@ import (
 
 	"github.com/IBM/argocd-interlace/pkg/application"
 	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
 	helmprov "github.com/IBM/argocd-interlace/pkg/provenance/helm"
 	kustprov "github.com/IBM/argocd-interlace/pkg/provenance/kustomize"
 	"github.com/IBM/argocd-interlace/pkg/sign"
@@ -39,7 +40,8 @@ const (
 )
 
 type StorageBackend struct {
-	appData application.ApplicationData
+	appData    application.ApplicationData
+	Provenance provenance.Provenance
 }
 
 func NewStorageBackend(appData application.ApplicationData) (*StorageBackend, error) {
@@ -48,11 +50,11 @@ func NewStorageBackend(appData application.ApplicationData) (*StorageBackend, er
 	}, nil
 }
 
-func (s StorageBackend) GetLatestManifestContent() ([]byte, error) {
+func (s *StorageBackend) GetLatestManifestContent() ([]byte, error) {
 	return nil, nil
 }
 
-func (s StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
+func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 	keyPath := utils.PRIVATE_KEY_PATH
 	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
@@ -163,12 +165,13 @@ func preparePatch(message, signature, kind string) ([]string, error) {
 	return patchData, nil
 }
 
-func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (s *StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
 
+	var prov provenance.Provenance
 	if s.appData.IsHelm {
-		prov, _ := helmprov.NewProvenance(s.appData)
+		prov, _ = helmprov.NewProvenance(s.appData)
 		err = prov.GenerateProvanance(manifestPath, computedFileHash, true, buildStartedOn, buildFinishedOn)
 
 		if err != nil {
@@ -176,7 +179,7 @@ func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildF
 			return err
 		}
 	} else {
-		prov, _ := kustprov.NewProvenance(s.appData)
+		prov, _ = kustprov.NewProvenance(s.appData)
 		err = prov.GenerateProvanance(manifestPath, computedFileHash, true, buildStartedOn, buildFinishedOn)
 
 		if err != nil {
@@ -184,8 +187,13 @@ func (s StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildF
 			return err
 		}
 	}
+	s.Provenance = prov
 
 	return nil
+}
+
+func (b *StorageBackend) GetProvenance() provenance.Provenance {
+	return b.Provenance
 }
 
 func (b *StorageBackend) Type() string {

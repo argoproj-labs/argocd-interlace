@@ -17,6 +17,7 @@
 package interlace
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/application"
 	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/manifest"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
 	helmprov "github.com/IBM/argocd-interlace/pkg/provenance/helm"
 	"github.com/IBM/argocd-interlace/pkg/provenance/kustomize"
 	kustprov "github.com/IBM/argocd-interlace/pkg/provenance/kustomize"
@@ -31,10 +33,15 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+	appClientset "github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func CreateEventHandler(app *appv1.Application) error {
+const provenanceAnnotationKey = "interlace.argocd.dev/provenance"
+
+func CreateEventHandler(app *appv1.Application, applicationClientset appClientset.Interface) error {
 
 	appName := app.ObjectMeta.Name
 	appClusterUrl := app.Spec.Destination.Server
@@ -106,10 +113,19 @@ func CreateEventHandler(app *appv1.Application) error {
 	if sourceVerified {
 		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-		err = signManifestAndGenerateProvenance(*appData, true, sourceVerified)
-
+		prov, err := signManifestAndGenerateProvenance(*appData, true, sourceVerified)
 		if err != nil {
 			return err
+		}
+		if prov != nil {
+			provURL := prov.GetReference().URL
+			log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
+			err = updateApplicationWithProvenanceRefAnnotation(app, applicationClientset, prov)
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Infof("[INFO][%s]: provenance data is nil", appName)
 		}
 	}
 
@@ -122,7 +138,7 @@ func CreateEventHandler(app *appv1.Application) error {
 // Sign manifest
 // Generate provenance record
 // Store signed manifest, provenance record in annotation
-func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
+func UpdateEventHandler(oldApp, newApp *appv1.Application, applicationClientset appClientset.Interface) error {
 
 	generateManifest := false
 	created := false
@@ -208,9 +224,19 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 		if sourceVerified {
 			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-			err := signManifestAndGenerateProvenance(*appData, created, sourceVerified)
+			prov, err := signManifestAndGenerateProvenance(*appData, created, sourceVerified)
 			if err != nil {
 				return err
+			}
+			if prov != nil {
+				provURL := prov.GetReference().URL
+				log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
+				err = updateApplicationWithProvenanceRefAnnotation(newApp, applicationClientset, prov)
+				if err != nil {
+					return err
+				}
+			} else {
+				log.Infof("[INFO][%s]: provenance data is nil", appName)
 			}
 		}
 
@@ -218,12 +244,12 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application) error {
 	return nil
 }
 
-func signManifestAndGenerateProvenance(appData application.ApplicationData, created bool, sourceVerified bool) error {
+func signManifestAndGenerateProvenance(appData application.ApplicationData, created bool, sourceVerified bool) (provenance.Provenance, error) {
 
 	interlaceConfig, err := config.GetInterlaceConfig()
 	if err != nil {
 		log.Errorf("Error in loading config: %s", err.Error())
-		return nil
+		return nil, nil
 	}
 
 	manifestStorageType := interlaceConfig.ManifestStorageType
@@ -232,11 +258,12 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 
 	if err != nil {
 		log.Errorf("Error in initializing storage backends: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	storageBackend := allStorageBackEnds[manifestStorageType]
 
+	var prov provenance.Provenance
 	if storageBackend != nil {
 
 		manifestGenerated := false
@@ -252,7 +279,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 			manifestGenerated, err = manifest.GenerateInitialManifest(appData)
 			if err != nil {
 				log.Errorf("Error in generating initial manifest: %s", err.Error())
-				return err
+				return nil, err
 			}
 		} else {
 
@@ -267,10 +294,10 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 					log.Info("manifestGenerated after generating initial manifest again: ", manifestGenerated)
 					if err != nil {
 						log.Errorf("Error in generating initial manifest: %s", err.Error())
-						return err
+						return nil, err
 					}
 				} else {
-					return err
+					return nil, err
 				}
 
 			}
@@ -278,7 +305,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 			manifestGenerated, err = manifest.GenerateManifest(appData, yamlBytes)
 			if err != nil {
 				log.Errorf("Error in generating latest manifest: %s", err.Error())
-				return err
+				return nil, err
 			}
 		}
 		log.Info("manifestGenerated ", manifestGenerated)
@@ -287,7 +314,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 			err = storageBackend.StoreManifestBundle(sourceVerified)
 			if err != nil {
 				log.Errorf("Error in storing latest manifest bundle(signature, prov) %s", err.Error())
-				return err
+				return nil, err
 			}
 
 		}
@@ -301,7 +328,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
 			if err != nil {
 				log.Errorf("Error in storing manifest provenance: %s", err.Error())
-				return err
+				return nil, err
 			}
 
 		} else {
@@ -309,14 +336,48 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 				err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
 				if err != nil {
 					log.Errorf("Error in storing manifest provenance: %s", err.Error())
-					return err
+					return nil, err
 				}
 			}
 		}
+
+		prov = storageBackend.GetProvenance()
 	} else {
 
-		return fmt.Errorf("Could not find storage backend")
+		return nil, fmt.Errorf("Could not find storage backend")
+	}
+	if prov == nil {
+		log.Info("storageBackend.GetProvenance() returns nli")
+	} else {
+		log.Infof("storageBackend.GetProvenance() returns provenance with uuid: %s, url: %s", prov.GetReference().UUID, prov.GetReference().URL)
 	}
 
+	return prov, nil
+}
+
+func updateApplicationWithProvenanceRefAnnotation(app *appv1.Application, applicationClientset appClientset.Interface, prov provenance.Provenance) error {
+	appName := app.GetName()
+	appNamespace := app.GetNamespace()
+
+	provData, err := prov.GetReference().GetAttestation()
+	if err != nil {
+		provURL := prov.GetReference().URL
+		return errors.Wrap(err, fmt.Sprintf("failed to get provenance data from %s", provURL))
+	}
+	current, err := applicationClientset.ArgoprojV1alpha1().Applications(appNamespace).Get(context.TODO(), appName, metav1.GetOptions{})
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("failed to get %s", appName))
+	}
+	appAnnotations := current.GetAnnotations()
+	if appAnnotations == nil {
+		appAnnotations = map[string]string{}
+	}
+	appAnnotations[provenanceAnnotationKey] = string(provData)
+	updated := current
+	updated.SetAnnotations(appAnnotations)
+	_, err = applicationClientset.ArgoprojV1alpha1().Applications(appNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("failed to update %s with the provenance annotation", appName))
+	}
 	return nil
 }

@@ -17,13 +17,51 @@
 package provenance
 
 import (
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
+	"strings"
 	"time"
-
-	"github.com/IBM/argocd-interlace/pkg/application"
 )
 
 type Provenance interface {
-	GenerateProvanance(appData application.ApplicationData, target, targatDigest string,
-		uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
-	VerifySourceMaterial(appData application.ApplicationData) (bool, error)
+	GenerateProvanance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
+	VerifySourceMaterial() (bool, error)
+	GetReference() *ProvenanceRef
+}
+
+type ProvenanceRef struct {
+	UUID string
+	URL  string
+}
+
+func (pr *ProvenanceRef) GetAttestation() ([]byte, error) {
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	resp, err := http.Get(pr.URL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	provEntryBytes, _ := ioutil.ReadAll(resp.Body)
+	provEntryBytes = []byte(strings.TrimSuffix(string(provEntryBytes), "\n"))
+	var provEntry map[string]interface{}
+	err = json.Unmarshal(provEntryBytes, &provEntry)
+	if err != nil {
+		return nil, err
+	}
+	var attestationData map[string]interface{}
+	for _, v := range provEntry {
+		attestationData = v.(map[string]interface{})
+		break
+	}
+	dataMap := attestationData["attestation"].(map[string]interface{})
+	attestationB64DoubleEncoded := dataMap["data"].(string)
+	b64Encoded, err := base64.StdEncoding.DecodeString(attestationB64DoubleEncoded)
+	if err != nil {
+		return nil, err
+	}
+	return b64Encoded, nil
 }
