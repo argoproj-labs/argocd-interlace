@@ -3,7 +3,7 @@
 set -e
 
 ARGOCD_NAMESPACE=$1
-USE_SAMPLE_PUBLIC_KEY=$2
+USE_EXAMPLE_KEYS=$2
 
 if ! [ -x "$(command -v kubectl)" ]; then
     echo 'Error: kubectl is not installed.' >&2
@@ -22,7 +22,7 @@ fi
 
 if ! [ -x "$(command -v cosign)" ]; then
     # try installing by go install command 
-    go install github.com/sigstore/cosign/cmd/cosign@latest || true
+    go install github.com/sigstore/cosign/cmd/cosign@v1.5.2 || true
     if ! [ -x "$(command -v cosign)" ]; then
         echo 'Error: cosign is not installed.' >&2
         exit 1
@@ -63,18 +63,24 @@ argoAPIToken=$(curl -sk https://$argoServerURL/api/v1/session -d "{\"username\":
 inclusteEndpoint="https://argocd-server.$ARGOCD_NAMESPACE.svc.cluster.local"
 kubectl patch secret argocd-token-secret -n argocd-interlace -p="{\"data\":{\"ARGOCD_TOKEN\":\"$(echo $argoAPIToken | base64)\",\"ARGOCD_API_BASE_URL\":\"$(echo $inclusteEndpoint | base64)\",\"ARGOCD_PWD\":\"$argoLoginPass\"}}"
 
-if [ ! -f cosign.key ]; then
+keysDir="./keys"
+if [[ $USE_EXAMPLE_KEYS == "true" ]]; then
+    keysDir="./examples/keys"
+fi
+
+cosignKeyName="$keysDir/cosign.key"
+cosignPubkeyName="$keysDir/cosign.pub"
+if [ ! -f $cosignKeyName ]; then
+    orgDir=$(pwd)
+    cd $keysDir
     COSIGN_PASSWORD="" cosign generate-key-pair
+    cd $orgDir
 fi
 
 # configure `signing-secrets`
-kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.key\":\"$(cat cosign.key | base64)\",\"cosign.pub\":\"$(cat cosign.pub | base64)\"}}"
+kubectl patch secret signing-secrets -n argocd-interlace -p="{\"data\":{\"cosign.key\":\"$(cat $cosignKeyName | base64)\",\"cosign.pub\":\"$(cat $cosignPubkeyName | base64)\"}}"
 
-pubringName="pubring.gpg"
-if [[ $USE_SAMPLE_PUBLIC_KEY == "true" ]]; then
-    pubringName="sample-pubring.gpg"
-fi
-
+pubringName="$keysDir/pubring.gpg"
 if [ ! -f $pubringName ]; then
     gpg --export --output $pubringName
 fi

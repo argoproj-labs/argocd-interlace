@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
@@ -59,18 +60,18 @@ var (
 	Read = readPasswordFn
 )
 
-func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) error {
+func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) (*provenance.ProvenanceRef, error) {
 
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(utils.PRIVATE_KEY_PATH))
 	if err != nil {
 		log.Errorf("Error in reading private key:  %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	pb, _ := pem.Decode(ecdsaPriv)
@@ -81,13 +82,13 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 
 	if err != nil {
 		log.Errorf("Error in dycrypting private key: %s", err.Error())
-		return err
+		return nil, err
 	}
 	priv, err := x509.ParsePKCS8PrivateKey(x509Encoded)
 
 	if err != nil {
 		log.Errorf("Error in parsing private key: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
@@ -95,26 +96,26 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	})
 	if err != nil {
 		log.Errorf("Error in creating new signer: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	env, err := signer.SignPayload("application/vnd.in-toto+json", b)
 	if err != nil {
 		log.Errorf("Error in signing payload: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	// Now verify
 	err = signer.Verify(env)
 	if err != nil {
 		log.Errorf("Error in verifying env: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	eb, err := json.Marshal(env)
 	if err != nil {
 		log.Errorf("Error in marshaling env: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	log.Debug("attestation.json", string(eb))
@@ -122,16 +123,17 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	err = utils.WriteToFile(string(eb), appDirPath, utils.ATTESTATION_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing attestation to a file: %s", err.Error())
-		return err
+		return nil, err
 	}
 
 	attestationPath := filepath.Join(appDirPath, utils.ATTESTATION_FILE_NAME)
 
+	var provRef *provenance.ProvenanceRef
 	if uploadTLog {
-		upload(it, attestationPath, appName)
+		provRef = upload(it, attestationPath, appName)
 	}
 
-	return nil
+	return provRef, nil
 
 }
 
@@ -196,7 +198,7 @@ func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
 	return errors.New("invalid signature")
 }
 
-func upload(it in_toto.Statement, attestationPath, appName string) {
+func upload(it in_toto.Statement, attestationPath, appName string) *provenance.ProvenanceRef {
 
 	pubKeyPath := utils.PUB_KEY_PATH
 	// If we do it twice, it should already exist
@@ -204,14 +206,18 @@ func upload(it in_toto.Statement, attestationPath, appName string) {
 
 	outputContains(out, "Created entry at")
 
-	_ = getUUIDFromUploadOutput(out)
+	uuid, url := getUUIDFromUploadOutput(out)
 
-	log.Infof("[INFO][%s] Interlace generated provenance record of manifest build", appName)
+	log.Infof("[INFO][%s] Interlace generated provenance record of manifest build with uuid: %s, url: %s", appName, uuid, url)
 
 	log.Infof("[INFO][%s] Interlace stores attestation to provenance record to Rekor transparency log", appName)
 
 	log.Infof("[INFO][%s] %s", appName, out)
 
+	if uuid != "" && url != "" {
+		return &provenance.ProvenanceRef{UUID: uuid, URL: url}
+	}
+	return nil
 }
 
 func outputContains(output, sub string) {
@@ -221,13 +227,17 @@ func outputContains(output, sub string) {
 	}
 }
 
-func getUUIDFromUploadOutput(out string) string {
+func getUUIDFromUploadOutput(out string) (string, string) {
 
 	// Output looks like "Artifact timestamped at ...\m Wrote response \n Created entry at index X, available at $URL/UUID", so grab the UUID:
-	urlTokens := strings.Split(strings.TrimSpace(out), " ")
-	url := urlTokens[len(urlTokens)-1]
-	splitUrl := strings.Split(url, "/")
-	return splitUrl[len(splitUrl)-1]
+	// Example) Created entry at index 1587352, available at: https://rekor.sigstore.dev/api/v1/log/entries/d07107983ad1044259813fff2ff90e1f1a30009b4f43723f2205ad5d02ba43be\n
+	parts := strings.Split(strings.TrimSpace(out), ", ")
+	if len(parts) != 2 {
+		return "", ""
+	}
+	uuid := strings.TrimSpace(strings.ReplaceAll(parts[0], "Created entry at index ", ""))
+	url := strings.TrimSuffix(strings.TrimSpace(strings.ReplaceAll(parts[1], "available at: ", "")), "\n")
+	return uuid, url
 }
 
 func runCli(arg ...string) string {

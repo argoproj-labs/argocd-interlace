@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/IBM/argocd-interlace/pkg/application"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 )
 
@@ -27,6 +28,7 @@ type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
 	StoreManifestBundle(sourceVerifed bool) error
 	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error
+	GetProvenance() provenance.Provenance
 	Type() string
 }
 

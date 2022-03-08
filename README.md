@@ -28,6 +28,8 @@ $ make deploy
 ```
 This automates install and setup with default configuration.
 
+(Optional) If you want to setup argocd-interlace with your existing keys, do [Key Setup](docs/key_setup.md) and `make deploy` again.
+
 To verify that installation was successful, ensure Status of pod `argocd-interlace-controller` become `Running`:
 ```shell
 $ kubectl get pod -n argocd-interlace -w
@@ -37,22 +39,70 @@ pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          1
 
 ### Usage
 
-To try ArgoCD Interlace, you can use the example Application inside `examples` directory:
-```
-$ kubectl create -f examples/signed-application.yaml
+1. Deploy ArgoCD and ArgoCD Interlace with your keys.
 
-(Note that public key must be the sample one to verify the example correctly. You can setup it by: )
-$ make deploy USE_SAMPLE_PUBLIC_KEY=true
-```
+    Follow the [Installation](#installation) section.
 
-Then you can see the provenance record ID and its URL in the log.
-```
-$ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
+1. Sign your source material repository.
 
-...
+    Generate signatures using the signing script.
 
-time="2022-03-07T09:01:32Z" level=info msg="[INFO][sample-app] Created entry at index 1579738, available at: https://rekor.sigstore.dev/api/v1/log/entries/7ab813bb62f0d87ad7191856bd12fb8b640ca75a797169265cdc813bb435108f\n"
-```
+    ```
+    $ ./scripts/sign-source-repo.sh <PATH/TO/SOURCE_MATERIAL_REPO>
+    ```
+
+    Then 2 files `source-materials` and `source-materials.sig` should be generated, and push them to your remote repository.
+
+1. Create ArgoCD Application which uses the signed source materials.
+
+    ```
+    $ kubectl create -n argocd -f <PATH/TO/YOUR/APPLICATION>
+    ```
+
+    This is a normal ArgoCD step.
+
+1. Check annotations in the Application.
+
+    Then you can get the latest provenance data as below.
+
+    ```
+    $ kubectl get application <APPLICATION/NAME> -n <APPLICATION/NAMESPACE> -o jsonpath='{.metadata.annotations.interlace\.argocd\.dev/provenance}' | base64 -d | jq .
+    {
+        "_type": "https://in-toto.io/Statement/v0.1",
+        "predicateType": "https://slsa.dev/provenance/v0.1",
+        "subject": [
+            {
+                "name": "/tmp/output/sample-app/manifest.yaml",
+                "digest": {
+                    "sha256": "72d33174b97b178a035a16f04518ff971b1edb3d1b603c858f11e0f12befb8ca"
+                }
+            }
+        ],
+    ...
+        "predicate": {
+            ...
+            "materials": [
+                {
+                    "uri": "https://github.com/hirokuni-kitahara/sample-kustomize-app.git",
+                    "digest": {
+                    "commit": "0ff5408670b90b4a7ca69ca3829aa37e1acb39db",
+                    "path": "./",
+                    "revision": "master"
+                    }
+                }
+            ]
+        }
+    }
+    ```
+
+    `subject` field in the provenance contains the digest value of the generated manifest, and `materials` is a list of source material repositories with commit ID.
+
+    Also, you can check the detail information of the provenance in the log.
+    ```
+    $ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
+    ...
+    time="2022-03-07T09:01:32Z" level=info msg="[INFO][sample-app] Created entry at index 1579738, available at: https://rekor.sigstore.dev/api/v1/log/entries/7ab813bb62f0d87ad7191856bd12fb8b640ca75a797169265cdc813bb435108f\n"
+    ```
 
 ### Customize Settings
 

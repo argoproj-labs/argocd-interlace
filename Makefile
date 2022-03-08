@@ -2,7 +2,7 @@ IMG_NAME=ghcr.io/hirokuni-kitahara/argocd-interlace-controller
 
 ARGOCD_NAMESPACE ?= argocd
 
-USE_SAMPLE_PUBLIC_KEY ?= false
+USE_EXAMPLE_KEYS ?= false
 
 VERSION=dev
 TMP_DIR=/tmp/
@@ -25,7 +25,7 @@ deploy: check-argocd
 	@echo ---------------------------------
 	@echo configuring argocd-interlace
 	@echo ---------------------------------
-	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(USE_SAMPLE_PUBLIC_KEY)
+	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(USE_EXAMPLE_KEYS)
 	@echo ---------------------------------
 	@echo done!
 

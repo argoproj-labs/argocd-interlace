@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/IBM/argocd-interlace/pkg/application"
+	"github.com/IBM/argocd-interlace/pkg/provenance"
 	"github.com/IBM/argocd-interlace/pkg/provenance/attestation"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
@@ -31,6 +32,7 @@ import (
 
 type Provenance struct {
 	appData application.ApplicationData
+	ref     *provenance.ProvenanceRef
 }
 
 const (
@@ -43,7 +45,7 @@ func NewProvenance(appData application.ApplicationData) (*Provenance, error) {
 	}, nil
 }
 
-func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appSourceRevision := p.appData.AppSourceRevision
 	appDirPath := p.appData.AppDirPath
@@ -96,16 +98,19 @@ func (p Provenance) GenerateProvanance(target, targetDigest string, uploadTLog b
 		return err
 	}
 
-	err = attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
+	}
+	if provRef != nil {
+		p.ref = provRef
 	}
 
 	return nil
 }
 
-func (p Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
+func (p *Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
 
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
@@ -136,7 +141,7 @@ func (p Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
 	return materials
 }
 
-func (p Provenance) VerifySourceMaterial() (bool, error) {
+func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	appPath := p.appData.AppPath
 	repoUrl := p.appData.AppSourceRepoUrl
@@ -175,4 +180,8 @@ func (p Provenance) VerifySourceMaterial() (bool, error) {
 
 	return true, nil
 
+}
+
+func (p *Provenance) GetReference() *provenance.ProvenanceRef {
+	return p.ref
 }
