@@ -97,7 +97,7 @@ pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          1
 
     `subject` field in the provenance contains the digest value of the generated manifest, and `materials` is a list of source material repositories with commit ID.
 
-    Also, you can checkl the detail information of the provenance in the log.
+    Also, you can check the detail information of the provenance in the log.
     ```
     $ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
     ...
