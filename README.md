@@ -61,12 +61,12 @@ pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          1
 
     This is a normal ArgoCD step.
 
-1. Check annotations in the Application.
+1. Check provenance data in `ApplicationProvenance` resource.
 
-    Then you can get the latest provenance data as below.
+    You can check the latest provenance data as below.
 
     ```
-    $ kubectl get application <APPLICATION/NAME> -n <APPLICATION/NAMESPACE> -o jsonpath='{.metadata.annotations.interlace\.argocd\.dev/provenance}' | base64 -d | jq .
+    $ kubectl get applicationprovenance -n argocd-interlace <APPLICATION_NAME> -o jsonpath='{.status.provenance}' | base64 -d | jq .
     {
         "_type": "https://in-toto.io/Statement/v0.1",
         "predicateType": "https://slsa.dev/provenance/v0.1",

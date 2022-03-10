@@ -30,6 +30,10 @@
         secretKeyRef:
           name: argocd-token-secret
           key: ARGOCD_NAMESPACE
+    - name: "ARGOCD_INTERLACE_NAMESPACE"  
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
     - name: ARGOCD_API_BASE_URL
       valueFrom:
         secretKeyRef:

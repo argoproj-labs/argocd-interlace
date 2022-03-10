@@ -18,11 +18,14 @@ package interlace
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"time"
 
+	appprov "github.com/IBM/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	"github.com/IBM/argocd-interlace/pkg/application"
+	appprovClientset "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned"
 	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/manifest"
 	"github.com/IBM/argocd-interlace/pkg/provenance"
@@ -33,15 +36,15 @@ import (
 	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
-	appClientset "github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const provenanceAnnotationKey = "interlace.argocd.dev/provenance"
 
-func CreateEventHandler(app *appv1.Application, applicationClientset appClientset.Interface) error {
+func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientset.Interface, interlaceNS string) error {
 
 	appName := app.ObjectMeta.Name
 	appClusterUrl := app.Spec.Destination.Server
@@ -120,7 +123,7 @@ func CreateEventHandler(app *appv1.Application, applicationClientset appClientse
 		if prov != nil {
 			provURL := prov.GetReference().URL
 			log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
-			err = updateApplicationWithProvenanceRefAnnotation(app, applicationClientset, prov)
+			err = createOrUpdateApplicationProvenance(appProvClientset, app, prov, interlaceNS)
 			if err != nil {
 				return err
 			}
@@ -138,7 +141,7 @@ func CreateEventHandler(app *appv1.Application, applicationClientset appClientse
 // Sign manifest
 // Generate provenance record
 // Store signed manifest, provenance record in annotation
-func UpdateEventHandler(oldApp, newApp *appv1.Application, applicationClientset appClientset.Interface) error {
+func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appprovClientset.Interface, interlaceNS string) error {
 
 	generateManifest := false
 	created := false
@@ -231,7 +234,7 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, applicationClientset 
 			if prov != nil {
 				provURL := prov.GetReference().URL
 				log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
-				err = updateApplicationWithProvenanceRefAnnotation(newApp, applicationClientset, prov)
+				err = createOrUpdateApplicationProvenance(appProvClientset, newApp, prov, interlaceNS)
 				if err != nil {
 					return err
 				}
@@ -355,29 +358,68 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 	return prov, nil
 }
 
-func updateApplicationWithProvenanceRefAnnotation(app *appv1.Application, applicationClientset appClientset.Interface, prov provenance.Provenance) error {
+func createOrUpdateApplicationProvenance(appProvClientset appprovClientset.Interface, app *appv1.Application, prov provenance.Provenance, interlaceNS string) error {
 	appName := app.GetName()
 	appNamespace := app.GetNamespace()
 
-	provData, err := prov.GetReference().GetAttestation()
+	appprovName := appName
+
+	b64ProvData, err := prov.GetReference().GetAttestation()
 	if err != nil {
 		provURL := prov.GetReference().URL
 		return errors.Wrap(err, fmt.Sprintf("failed to get provenance data from %s", provURL))
 	}
-	current, err := applicationClientset.ArgoprojV1alpha1().Applications(appNamespace).Get(context.TODO(), appName, metav1.GetOptions{})
+	provData, err := base64.StdEncoding.DecodeString(string(b64ProvData))
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to get %s", appName))
+		return errors.Wrap(err, fmt.Sprintf("failed to get decode the base64 encoded provenance data"))
 	}
-	appAnnotations := current.GetAnnotations()
-	if appAnnotations == nil {
-		appAnnotations = map[string]string{}
-	}
-	appAnnotations[provenanceAnnotationKey] = string(provData)
-	updated := current
-	updated.SetAnnotations(appAnnotations)
-	_, err = applicationClientset.ArgoprojV1alpha1().Applications(appNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
+	appprovExists := false
+	current, err := appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Get(context.TODO(), appprovName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to update %s with the provenance annotation", appName))
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, fmt.Sprintf("failed to get %s", appprovName))
+		}
+	} else {
+		appprovExists = true
 	}
+
+	var newone *appprov.ApplicationProvenance
+	doneMsg := "created"
+	now := metav1.NewTime(time.Now().UTC())
+	if appprovExists {
+		newone = current
+		newone.Status = appprov.ApplicationProvenanceStatus{
+			LastUpdated: now,
+			Provenance:  provData,
+		}
+		_, err = appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Update(context.TODO(), newone, metav1.UpdateOptions{})
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to update ApplicationProvenance `%s`", appprovName))
+		}
+		doneMsg = "updated"
+	} else {
+		newone = &appprov.ApplicationProvenance{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: interlaceNS,
+				Name:      appprovName,
+			},
+			Spec: appprov.ApplicationProvenanceSpec{
+				Application: appprov.ApplicationRef{
+					Namespace: appNamespace,
+					Name:      appName,
+				},
+			},
+			Status: appprov.ApplicationProvenanceStatus{
+				LastUpdated: now,
+				Provenance:  provData,
+			},
+		}
+		_, err = appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Create(context.TODO(), newone, metav1.CreateOptions{})
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to create ApplicationProvenance `%s`", appprovName))
+		}
+	}
+	log.Infof("ApplicationProvenance `%s` is %s", appprovName, doneMsg)
+
 	return nil
 }

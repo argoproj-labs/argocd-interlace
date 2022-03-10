@@ -1,7 +1,6 @@
 IMG_NAME=ghcr.io/hirokuni-kitahara/argocd-interlace-controller
 
 ARGOCD_NAMESPACE ?= argocd
-
 USE_EXAMPLE_KEYS ?= false
 
 VERSION=dev
