@@ -26,6 +26,8 @@ import (
 	"time"
 )
 
+const maxTrialGetAttestation = 3
+
 type Provenance interface {
 	GenerateProvanance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
 	VerifySourceMaterial() (bool, error)
@@ -38,6 +40,21 @@ type ProvenanceRef struct {
 }
 
 func (pr *ProvenanceRef) GetAttestation() ([]byte, error) {
+	var b64Attestation []byte
+	var err error
+	for i := 0; i < maxTrialGetAttestation; i++ {
+		b64Attestation, err = getAttestation(pr)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return b64Attestation, nil
+}
+
+func getAttestation(pr *ProvenanceRef) ([]byte, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	resp, err := http.Get(pr.URL)
 	if err != nil {

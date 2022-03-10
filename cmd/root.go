@@ -20,6 +20,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/controller"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -35,13 +36,19 @@ var rootCmd = &cobra.Command{
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		config, _ := cmd.Flags().GetString("kubeconfig")
+		kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
 		namespace, _ := cmd.Flags().GetString("namespace")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		go controller.Start(ctx, config, namespace)
+		interlaceConfig, err := config.GetInterlaceConfig()
+		if err != nil {
+			log.Fatalf("Error in getting interlace config: %s", err.Error())
+			os.Exit(1)
+		}
+
+		go controller.Start(ctx, kubeconfig, namespace, interlaceConfig)
 
 		// Wait forever
 		select {}

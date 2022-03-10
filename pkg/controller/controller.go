@@ -22,6 +22,8 @@ import (
 	"runtime/debug"
 	"time"
 
+	appprovClientset "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned"
+	interlaceCfg "github.com/IBM/argocd-interlace/pkg/config"
 	"github.com/IBM/argocd-interlace/pkg/interlace"
 	"github.com/IBM/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
@@ -38,20 +40,31 @@ import (
 )
 
 type controller struct {
-	applicationClientset appClientset.Interface
-	informer             cache.SharedIndexInformer
-	appRefreshQueue      workqueue.RateLimitingInterface
-	namespace            string
+	applicationClientset     appClientset.Interface
+	appProvClientset         appprovClientset.Interface
+	informer                 cache.SharedIndexInformer
+	appRefreshQueue          workqueue.RateLimitingInterface
+	argocdNamespace          string
+	argocdInterlaceNamespace string
 }
 
-func Start(ctx context.Context, config string, namespace string) {
-	_, cfg, err := utils.GetClient(config)
+func Start(ctx context.Context, kubeconfig string, argocdNamespace string, config *interlaceCfg.InterlaceConfig) {
+	_, cfg, err := utils.GetClient(kubeconfig)
 	appClientset := appClientset.NewForConfigOrDie(cfg)
 	if err != nil {
 		log.Fatalf("Error in starting argocd interlace controller: %s", err.Error())
 	}
+	appProvClientset := appprovClientset.NewForConfigOrDie(cfg)
+	if err != nil {
+		log.Fatalf("Error in starting argocd interlace controller: %s", err.Error())
+	}
 
-	c := newController(appClientset, namespace)
+	interlaceNS := ""
+	if config != nil {
+		interlaceNS = config.ArgocdInterlaceNamespace
+	}
+
+	c := newController(appClientset, appProvClientset, argocdNamespace, interlaceNS)
 	c.Run(ctx)
 }
 
@@ -60,10 +73,10 @@ func (ctrl *controller) newApplicationInformer(applicationClientset appClientset
 	informer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (apiruntime.Object, error) {
-				return applicationClientset.ArgoprojV1alpha1().Applications(ctrl.namespace).List(context.TODO(), options)
+				return applicationClientset.ArgoprojV1alpha1().Applications(ctrl.argocdNamespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return applicationClientset.ArgoprojV1alpha1().Applications(ctrl.namespace).Watch(context.TODO(), options)
+				return applicationClientset.ArgoprojV1alpha1().Applications(ctrl.argocdNamespace).Watch(context.TODO(), options)
 			},
 		},
 		&appv1.Application{},
@@ -73,13 +86,15 @@ func (ctrl *controller) newApplicationInformer(applicationClientset appClientset
 	return informer
 }
 
-func newController(applicationClientset appClientset.Interface, namespace string) *controller {
+func newController(applicationClientset appClientset.Interface, appProvClientset appprovClientset.Interface, argocdNamespace, interlaceNS string) *controller {
 	q := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
 	ctrl := &controller{
-		applicationClientset: applicationClientset,
-		appRefreshQueue:      q,
-		namespace:            namespace,
+		applicationClientset:     applicationClientset,
+		appProvClientset:         appProvClientset,
+		appRefreshQueue:          q,
+		argocdNamespace:          argocdNamespace,
+		argocdInterlaceNamespace: interlaceNS,
 	}
 
 	appInformer := ctrl.newApplicationInformer(applicationClientset)
@@ -93,7 +108,7 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			app, ok := obj.(*appv1.Application)
 
 			if ok {
-				err := interlace.CreateEventHandler(app, applicationClientset)
+				err := interlace.CreateEventHandler(app, appProvClientset, interlaceNS)
 				if err != nil {
 					log.Errorf("Error in handling create event: %s", err.Error())
 				}
@@ -112,7 +127,7 @@ func newController(applicationClientset appClientset.Interface, namespace string
 			oldApp, oldOK := old.(*appv1.Application)
 			newApp, newOK := new.(*appv1.Application)
 			if oldOK && newOK {
-				err := interlace.UpdateEventHandler(oldApp, newApp, applicationClientset)
+				err := interlace.UpdateEventHandler(oldApp, newApp, appProvClientset, interlaceNS)
 				if err != nil {
 					log.Errorf("Error in handling update event: %s", err.Error())
 				}
