@@ -18,7 +18,7 @@
 package fake
 
 import (
-	interlacev1beta1 "github.com/IBM/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
+	interlacev1beta1 "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

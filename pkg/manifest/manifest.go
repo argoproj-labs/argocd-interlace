@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/IBM/argocd-interlace/pkg/application"
-	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/mapnode"
 	log "github.com/sirupsen/logrus"

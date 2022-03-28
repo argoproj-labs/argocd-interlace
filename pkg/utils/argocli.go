@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 

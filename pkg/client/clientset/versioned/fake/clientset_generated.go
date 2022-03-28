@@ -18,9 +18,9 @@
 package fake
 
 import (
-	clientset "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned"
-	interlacev1beta1 "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1"
-	fakeinterlacev1beta1 "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1/fake"
+	clientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
+	interlacev1beta1 "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1"
+	fakeinterlacev1beta1 "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

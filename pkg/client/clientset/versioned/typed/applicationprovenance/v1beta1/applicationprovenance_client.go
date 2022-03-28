@@ -20,8 +20,8 @@ package v1beta1
 import (
 	"net/http"
 
-	v1beta1 "github.com/IBM/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
-	"github.com/IBM/argocd-interlace/pkg/client/clientset/versioned/scheme"
+	v1beta1 "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
+	"github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

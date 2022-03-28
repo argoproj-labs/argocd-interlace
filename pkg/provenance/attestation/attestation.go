@@ -32,9 +32,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IBM/argocd-interlace/pkg/config"
-	"github.com/IBM/argocd-interlace/pkg/provenance"
-	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/pkg/cosign"

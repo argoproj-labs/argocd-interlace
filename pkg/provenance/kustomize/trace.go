@@ -24,8 +24,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/IBM/argocd-interlace/pkg/config"
-	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	k8sutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"

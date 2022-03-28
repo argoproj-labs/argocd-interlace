@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"net/http"
 
-	interlacev1beta1 "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1"
+	interlacev1beta1 "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned/typed/applicationprovenance/v1beta1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

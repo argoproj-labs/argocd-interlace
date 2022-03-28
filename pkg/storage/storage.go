@@ -19,9 +19,9 @@ package storage
 import (
 	"time"
 
-	"github.com/IBM/argocd-interlace/pkg/application"
-	"github.com/IBM/argocd-interlace/pkg/provenance"
-	"github.com/IBM/argocd-interlace/pkg/storage/annotation"
+	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
+	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
 )
 
 type StorageBackend interface {

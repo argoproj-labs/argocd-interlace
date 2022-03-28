@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	applicationprovenance "github.com/IBM/argocd-interlace/pkg/apis/applicationprovenance"
+	applicationprovenance "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance"
 )
 
 // SchemeGroupVersion is group version used to register these objects
