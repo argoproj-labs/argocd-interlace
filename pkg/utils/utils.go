@@ -29,7 +29,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"

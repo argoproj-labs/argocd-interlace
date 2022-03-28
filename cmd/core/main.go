@@ -17,8 +17,8 @@
 package main
 
 import (
-	"github.com/IBM/argocd-interlace/cmd"
-	"github.com/IBM/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/cmd"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 

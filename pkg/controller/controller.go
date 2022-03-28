@@ -22,10 +22,10 @@ import (
 	"runtime/debug"
 	"time"
 
-	appprovClientset "github.com/IBM/argocd-interlace/pkg/client/clientset/versioned"
-	interlaceCfg "github.com/IBM/argocd-interlace/pkg/config"
-	"github.com/IBM/argocd-interlace/pkg/interlace"
-	"github.com/IBM/argocd-interlace/pkg/utils"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
+	interlaceCfg "github.com/argoproj-labs/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/interlace"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	appClientset "github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
 

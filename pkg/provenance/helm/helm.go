@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/IBM/argocd-interlace/pkg/application"
-	"github.com/IBM/argocd-interlace/pkg/provenance"
-	"github.com/IBM/argocd-interlace/pkg/provenance/attestation"
-	"github.com/IBM/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
+	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	log "github.com/sirupsen/logrus"
 )

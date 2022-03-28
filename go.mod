@@ -1,4 +1,4 @@
-module github.com/IBM/argocd-interlace
+module github.com/argoproj-labs/argocd-interlace
 
 go 1.16
 
@@ -22,7 +22,7 @@ require (
 	k8s.io/client-go v0.23.1
 )
 
-replace github.com/IBM/argocd-interlace => ./
+replace github.com/argoproj-labs/argocd-interlace => ./
 
 // the following replace is from argocd's go.mod
 replace (

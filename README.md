@@ -22,7 +22,7 @@ Prerequisite: Install [ArgoCD](https://argo-cd.readthedocs.io/en/stable/getting_
 
 To install ArgoCD Interlace, run:
 ```
-$ git clone https://github.com/IBM/argocd-interlace.git
+$ git clone https://github.com/argoproj-labs/argocd-interlace.git
 $ cd argocd-interlace
 $ make deploy
 ```

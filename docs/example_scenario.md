@@ -17,10 +17,10 @@ Follow the steps described [here](signing_source_material.md) for signing source
 
 ## Creating an application resource in ArgoCD
 
-To create [a sample ArgoCD application](https://github.com/kubernetes-sigs/kustomize/tree/master/examples/helloWorld), modify the sample [applicatin.yaml](https://raw.githubusercontent.com/IBM/argocd-interlace/main/examples/application.yaml) to refer to forked repository and run:
+To create [a sample ArgoCD application](https://github.com/kubernetes-sigs/kustomize/tree/master/examples/helloWorld), modify the sample [applicatin.yaml](https://raw.githubusercontent.com/argoproj-labs/argocd-interlace/main/examples/application.yaml) to refer to forked repository and run:
 
 ```shell
-kubectl apply --filename https://raw.githubusercontent.com/IBM/argocd-interlace/main/examples/application.yaml
+kubectl apply --filename https://raw.githubusercontent.com/argoproj-labs/argocd-interlace/main/examples/application.yaml
 ```
 ArgoCD will deploy this application to `helloworld-ns` namespace.
 
