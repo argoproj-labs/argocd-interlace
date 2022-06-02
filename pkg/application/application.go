@@ -25,6 +25,7 @@ type ApplicationData struct {
 	AppSourceRevision           string
 	AppSourceCommitSha          string
 	AppSourcePreiviousCommitSha string
+	AppDestinationNamespace     string
 	Chart                       string
 	IsHelm                      bool
 	ValueFiles                  []string
@@ -34,7 +35,7 @@ type ApplicationData struct {
 }
 
 func NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
-	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
+	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, appDestNS,
 	chart string, isHelm bool, valueFiles []string, releaseName string,
 	values string, version string) (*ApplicationData, error) {
 	return &ApplicationData{
@@ -46,6 +47,7 @@ func NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
 		AppSourceRevision:           appSourceRevision,
 		AppSourceCommitSha:          appSourceCommitSha,
 		AppSourcePreiviousCommitSha: appSourcePreiviousCommitSha,
+		AppDestinationNamespace:     appDestNS,
 		Chart:                       chart,
 		IsHelm:                      isHelm,
 		ValueFiles:                  valueFiles,

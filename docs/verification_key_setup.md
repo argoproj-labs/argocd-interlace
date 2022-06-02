@@ -1,5 +1,5 @@
 ## Signing and Verification Key Setup
-ArgoCD Interlace requires a key pair (signing and verification keys) for verifying integrity of source materials used for generating manifest. ArgoCD Interlace PGP key for signing source materials. A secret resource (keyring-secret) which contains public key should be setup in a cluster for enabling signature verification by ArgoCD Interlace. 
+ArgoCD Interlace requires a key pair (signing and verification keys) for verifying integrity of source materials used for generating manifest. ArgoCD Interlace PGP key for signing source materials. A secret resource (verification-secret) which contains public key should be setup in a cluster for enabling signature verification by ArgoCD Interlace. 
 
 This document uses [gpg key](https://www.gnupg.org/index.html) for setting up signing and verification key.
 
@@ -39,4 +39,4 @@ Then, you need to export a public key to a file. The following example shows a p
 $ gpg --export signer@enterprise.com > /tmp/pubring.gpg
 ```
 
-When deploying ArgoCD Interlace `/tmp/pubring.gpg` would be used for setting up verification key as secret resource with the name `keyring-secret`
+When deploying ArgoCD Interlace `/tmp/pubring.gpg` would be used for setting up verification key as secret resource with the name `verification-secret`

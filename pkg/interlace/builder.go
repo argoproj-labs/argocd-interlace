@@ -89,11 +89,12 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 	appSourcePreiviousCommitSha := ""
 	var err error
 	sourceVerified := false
+	appDestNamespace := app.Spec.Destination.Namespace
 
 	chart := app.Spec.Source.Chart
 	appData, _ := application.NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
 		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-		chart, isHelm, valueFiles, releaseName, values, version)
+		appDestNamespace, chart, isHelm, valueFiles, releaseName, values, version)
 
 	if isHelm {
 		log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
@@ -164,6 +165,7 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 		appSourceRepoUrl := newApp.Status.Sync.ComparedTo.Source.RepoURL
 		appSourceRevision := newApp.Status.Sync.ComparedTo.Source.TargetRevision
 		appSourceCommitSha := newApp.Status.Sync.Revision
+		appDestNamespace := newApp.Spec.Destination.Namespace
 		appClusterUrl := newApp.Status.Sync.ComparedTo.Destination.Server
 		revisionHistories := newApp.Status.History
 		appSourcePreiviousCommitSha := ""
@@ -201,7 +203,7 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 		chart := newApp.Spec.Source.Chart
 		appData, _ := application.NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
 			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-			chart, isHelm, valueFiles, releaseName, values, version)
+			appDestNamespace, chart, isHelm, valueFiles, releaseName, values, version)
 
 		log.Infof("[INFO][%s]: Interlace detected update of an exsiting Application resource: %s", appName, appName)
 

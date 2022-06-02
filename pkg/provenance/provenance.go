@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -74,8 +75,14 @@ func getAttestation(pr *ProvenanceRef) ([]byte, error) {
 		attestationData = v.(map[string]interface{})
 		break
 	}
-	dataMap := attestationData["attestation"].(map[string]interface{})
-	attestationB64DoubleEncoded := dataMap["data"].(string)
+	dataMap, ok := attestationData["attestation"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to convert attestationData[\"attestation\"] into map[string]interface{}, its type is %T", attestationData["attestation"])
+	}
+	attestationB64DoubleEncoded, ok := dataMap["data"].(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert dataMap[\"data\"] into map[string]interface{}, its type is %T", dataMap["data"])
+	}
 	b64Encoded, err := base64.StdEncoding.DecodeString(attestationB64DoubleEncoded)
 	if err != nil {
 		return nil, err

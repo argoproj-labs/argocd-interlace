@@ -22,22 +22,27 @@ Prerequisite: Install [ArgoCD](https://argo-cd.readthedocs.io/en/stable/getting_
 
 To install ArgoCD Interlace, run:
 ```
-$ git clone https://github.com/argoproj-labs/argocd-interlace.git
-$ cd argocd-interlace
-$ make deploy
-```
-This automates install and setup with default configuration.
-
-(Optional) If you want to setup argocd-interlace with your existing keys, do [Key Setup](docs/key_setup.md) and `make deploy` again.
-
-To verify that installation was successful, ensure Status of pod `argocd-interlace-controller` become `Running`:
-```shell
-$ kubectl get pod -n argocd-interlace -w
-NAME                                              READY   STATUS    RESTARTS   AGE
-pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          19m
+$ kubectl apply -f https://raw.githubusercontent.com/argoproj-labs/argocd-interlace/main/releases/release.yaml
 ```
 
-### Usage
+Then ArgoCD Interlace gets running and it is waiting for your setup now.
+You can setup just by the following 2 kubectl patch commands. 5 inputs variables are required for them.
+
+- `ARGOCD_NAMESPACE` ... the namespace where ArgoCD is running ("argocd" by default installation)
+- `ARGOCD_USERNAME` & `ARGOCD_PASSWORD` ... ArgoCD admin username and passowrd (username is "admin" by default)
+- `VERIFY_KEY_PATH` ... verification key for source repository content signature
+- `SIGN_KEY_PATH` ... signing key for the generated policies
+(for details about key setup, refer to [Key Setup](docs/key_setup.md).)
+
+```
+$ kubectl patch secret argocd-config-secret -n argocd-interlace -p="{\"data\":{\"ARGOCD_NAMESPACE\":\"$(echo -n $ARGOCD_NAMESPACE | base64)\",\"ARGOCD_USER\":\"$(echo -n $ARGOCD_USERNAME | base64)\",\"ARGOCD_USER_PWD\":\"$(echo -n $ARGOCD_PASSWORD | base64)\"}}"
+
+$ kubectl patch secret argocd-interlace-keys -n argocd-interlace -p="{\"data\":{\"cosign.key\":\"$(cat $SIGN_KEY_PATH | base64)\",\"pubring.gpg\":\"$(cat $VERIFY_KEY_PATH | base64)\"}}"
+```
+
+Once 2 secrets are patched by the 2 commands above, ArgoCD Interlace is ready!
+
+### How to sign your source repository and how to check the provenance 
 
 1. Deploy ArgoCD and ArgoCD Interlace with your keys.
 

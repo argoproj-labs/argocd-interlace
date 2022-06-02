@@ -19,6 +19,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/controller"
@@ -29,6 +30,7 @@ import (
 var kubeconfig string
 var namespace string
 var debug bool
+var maxAttempt = 30
 
 var rootCmd = &cobra.Command{
 	Use:   "argocd-interlace",
@@ -37,7 +39,6 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
-		namespace, _ := cmd.Flags().GetString("namespace")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -47,8 +48,27 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("Error in getting interlace config: %s", err.Error())
 			os.Exit(1)
 		}
+		i := 0
+		sleepFactor := 1.0
+		for i < maxAttempt {
+			sleepFactor *= 1.5
+			if sleepFactor > 30.0 {
+				sleepFactor = 30.0
+			}
+			sleepSec := time.Second * time.Duration(int(sleepFactor))
+			ready, err := interlaceConfig.CheckReadiness()
+			if err != nil {
+				log.Infof("waiting for configuration setup; %s; next attempt is in %s", err.Error(), sleepSec.String())
+			}
+			if ready {
+				break
+			} else {
+				time.Sleep(sleepSec)
+			}
+			i++
+		}
 
-		go controller.Start(ctx, kubeconfig, namespace, interlaceConfig)
+		go controller.Start(ctx, kubeconfig, interlaceConfig)
 
 		// Wait forever
 		select {}

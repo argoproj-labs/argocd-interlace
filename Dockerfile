@@ -22,20 +22,11 @@ RUN mkdir -p /interlace-app && mkdir -p /interlace-app/public
 
 RUN chgrp -R 0 /interlace-app && chmod -R g=u /interlace-app
 
-COPY build/_bin/argocd-interlace /usr/local/bin/argocd-interlace
-
 RUN curl -Lo rekor-cli https://github.com/sigstore/rekor/releases/download/v0.3.0/rekor-cli-linux-amd64 &&\
     mv rekor-cli /usr/local/bin/rekor-cli &&\
     chmod +x /usr/local/bin/rekor-cli
 
 WORKDIR /interlace-app
-COPY scripts/generate_manifest_bundle.sh /interlace-app/generate_manifest_bundle.sh
-COPY scripts/gpg-annotation-sign.sh /interlace-app/gpg-annotation-sign.sh
-COPY scripts/x509-annotation-sign.sh /interlace-app/x509-annotation-sign.sh
-
-RUN chmod +x /interlace-app/generate_manifest_bundle.sh &&\
-    chmod +x /interlace-app/gpg-annotation-sign.sh &&\
-    chmod +x /interlace-app/x509-annotation-sign.sh
 
 RUN curl -Lo yq https://github.com/mikefarah/yq/releases/download/3.4.0/yq_linux_amd64 &&\
     mv yq /usr/bin/yq &&\
@@ -59,6 +50,16 @@ RUN curl -Lo helm-sigstore https://github.com/sigstore/helm-sigstore/releases/do
 RUN mkdir -p /.argocd
 
 RUN chgrp -R 0 /.argocd && chmod -R g=u /.argocd
+
+COPY scripts/generate_manifest_bundle.sh /interlace-app/generate_manifest_bundle.sh
+COPY scripts/gpg-annotation-sign.sh /interlace-app/gpg-annotation-sign.sh
+COPY scripts/x509-annotation-sign.sh /interlace-app/x509-annotation-sign.sh
+
+RUN chmod +x /interlace-app/generate_manifest_bundle.sh &&\
+    chmod +x /interlace-app/gpg-annotation-sign.sh &&\
+    chmod +x /interlace-app/x509-annotation-sign.sh
+
+COPY build/_bin/argocd-interlace /usr/local/bin/argocd-interlace
 
 ENTRYPOINT ["argocd-interlace"]
 

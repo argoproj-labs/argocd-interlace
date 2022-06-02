@@ -24,13 +24,14 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
@@ -48,7 +49,8 @@ type IntotoSigner struct {
 }
 
 const (
-	cli = "/usr/local/bin/rekor-cli"
+	cli              = "/usr/local/bin/rekor-cli"
+	publicKeyPEMType = "PUBLIC KEY"
 )
 
 type SignOpts struct {
@@ -91,9 +93,10 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		return nil, err
 	}
 
-	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
+	intotoSigner := &IntotoSigner{
 		priv: priv.(*ecdsa.PrivateKey),
-	})
+	}
+	signer, err := dsse.NewEnvelopeSigner(intotoSigner)
 	if err != nil {
 		log.Errorf("Error in creating new signer: %s", err.Error())
 		return nil, err
@@ -106,7 +109,7 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	}
 
 	// Now verify
-	err = signer.Verify(env)
+	_, err = signer.Verify(env)
 	if err != nil {
 		log.Errorf("Error in verifying env: %s", err.Error())
 		return nil, err
@@ -130,7 +133,15 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 
 	var provRef *provenance.ProvenanceRef
 	if uploadTLog {
-		provRef = upload(it, attestationPath, appName)
+		// public key file is required to upload the attestation
+		pub := intotoSigner.Public()
+		pubkeyPath, err := savePubkey(pub)
+		if err != nil {
+			log.Errorf("Error in saving public key: %s", err.Error())
+			return nil, err
+		}
+		defer os.Remove(pubkeyPath)
+		provRef = upload(it, attestationPath, appName, pubkeyPath)
 	}
 
 	return provRef, nil
@@ -180,16 +191,16 @@ func GetPass(confirm bool) ([]byte, error) {
 	return pw1, nil
 }
 
-func (it *IntotoSigner) Sign(data []byte) ([]byte, string, error) {
+func (it *IntotoSigner) Sign(data []byte) ([]byte, error) {
 	h := sha256.Sum256(data)
 	sig, err := it.priv.Sign(rand.Reader, h[:], crypto.SHA256)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return sig, "", nil
+	return sig, nil
 }
 
-func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
+func (it *IntotoSigner) Verify(data, sig []byte) error {
 	h := sha256.Sum256(data)
 	ok := ecdsa.VerifyASN1(&it.priv.PublicKey, h[:], sig)
 	if ok {
@@ -198,11 +209,17 @@ func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
 	return errors.New("invalid signature")
 }
 
-func upload(it in_toto.Statement, attestationPath, appName string) *provenance.ProvenanceRef {
+func (it *IntotoSigner) KeyID() (string, error) {
+	return "no-keyid", nil
+}
 
-	pubKeyPath := utils.PUB_KEY_PATH
+func (it *IntotoSigner) Public() crypto.PublicKey {
+	return it.priv.Public()
+}
+
+func upload(it in_toto.Statement, attestationPath, appName, pubkeyPath string) *provenance.ProvenanceRef {
 	// If we do it twice, it should already exist
-	out := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubKeyPath, "--pki-format", "x509")
+	out := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubkeyPath, "--pki-format", "x509")
 
 	outputContains(out, "Created entry at")
 
@@ -279,4 +296,28 @@ func run(stdin, cmd string, arg ...string) string {
 		log.Errorf("Error in executing CLI: %s", string(b))
 	}
 	return string(b)
+}
+
+func savePubkey(pubkey crypto.PublicKey) (string, error) {
+	f, err := ioutil.TempFile("", "publickey")
+	if err != nil {
+		return "", err
+	}
+	pubkeyPEM, err := x509.MarshalPKIXPublicKey(pubkey)
+	if err != nil {
+		return "", err
+	}
+	pemBlock := &pem.Block{
+		Type:  publicKeyPEMType,
+		Bytes: pubkeyPEM,
+	}
+	err = pem.Encode(f, pemBlock)
+	if err != nil {
+		return "", err
+	}
+	pubkeyPath, err := filepath.Abs(f.Name())
+	if err != nil {
+		return "", err
+	}
+	return pubkeyPath, nil
 }

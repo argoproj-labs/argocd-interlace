@@ -27,6 +27,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
+	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,18 +52,18 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	appDirPath := p.appData.AppDirPath
 	chart := p.appData.Chart
 
-	entryPoint := "helm install"
+	entryPoint := "helm"
 	helmChart := fmt.Sprintf("%s-%s.tgz", chart, appSourceRevision)
-	recipe := in_toto.ProvenanceRecipe{
-		EntryPoint: entryPoint,
-		Arguments:  []string{chart + "  " + helmChart},
+	invocation := intotoprov02.ProvenanceInvocation{
+		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
+		Parameters:   []string{"install", chart, helmChart},
 	}
 
 	subjects := []in_toto.Subject{}
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
 	subjects = append(subjects, in_toto.Subject{Name: target,
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256": targetDigest,
 		},
 	})
@@ -72,18 +73,18 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	it := in_toto.Statement{
 		StatementHeader: in_toto.StatementHeader{
 			Type:          in_toto.StatementInTotoV01,
-			PredicateType: in_toto.PredicateSLSAProvenanceV01,
+			PredicateType: intotoprov02.PredicateSLSAProvenance,
 			Subject:       subjects,
 		},
-		Predicate: in_toto.ProvenancePredicate{
-			Metadata: &in_toto.ProvenanceMetadata{
+		Predicate: intotoprov02.ProvenancePredicate{
+			Metadata: &intotoprov02.ProvenanceMetadata{
 				Reproducible:    true,
 				BuildStartedOn:  &buildStartedOn,
 				BuildFinishedOn: &buildFinishedOn,
 			},
 
-			Materials: materials,
-			Recipe:    recipe,
+			Materials:  materials,
+			Invocation: invocation,
 		},
 	}
 	b, err := json.Marshal(it)
@@ -110,30 +111,30 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	return nil
 }
 
-func (p *Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
+func (p *Provenance) generateMaterial() []intotoprov02.ProvenanceMaterial {
 
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 	appSourceRevision := p.appData.AppSourceRevision
 	chart := p.appData.Chart
 	values := p.appData.Values
-	materials := []in_toto.ProvenanceMaterial{}
+	materials := []intotoprov02.ProvenanceMaterial{}
 
 	helmChartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, appSourceRevision)
 	chartHash, _ := utils.ComputeHash(helmChartPath)
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 		URI: appSourceRepoUrl + ".git",
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256hash": chartHash,
 			"revision":   appSourceRevision,
 			"name":       chart,
 		},
 	})
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"material":   "values",
 			"parameters": values,
 		},

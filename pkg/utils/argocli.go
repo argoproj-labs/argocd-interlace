@@ -18,6 +18,7 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
@@ -28,7 +29,10 @@ const (
 	argocdCmd = "argocd"
 )
 
-func ApplyResourcePatch(kind, resourceName, namespace, appName string, patches []string) error {
+// TODO: remove this function once argocd v2.4.0 is released
+// It includes a bug fix for the issue https://github.com/argoproj/argo-cd/issues/9196
+// As a workaround, this function uses argocd command for patch resource to avoid the issue
+func ApplyResourcePatch(kind, resourceName, namespace, appName string, patchBytes []byte) error {
 
 	err := loginArgoCDAPI()
 	if err != nil {
@@ -37,7 +41,7 @@ func ApplyResourcePatch(kind, resourceName, namespace, appName string, patches [
 
 	var result bool = false
 	err = retry(RETRY_ATTEMPTS, 2*time.Second, func() (res bool, err error) {
-		result := patchResource(kind, resourceName, namespace, appName, patches)
+		result := patchResource(kind, resourceName, namespace, appName, patchBytes)
 		return result, nil
 	})
 
@@ -71,10 +75,11 @@ func loginArgoCDAPI() error {
 		return nil
 	}
 
-	argocdPwd := interlaceConfig.ArgocdPwd
-	argoserver := interlaceConfig.ArgocdServer
+	argocdUser := interlaceConfig.ArgocdUser
+	argocdPass := interlaceConfig.ArgocdUserPwd
+	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdApiBaseUrl, "https://")
 
-	_, err = CmdExec(argocdCmd, "", "login", argoserver, "--insecure", "--username", "admin", "--password", argocdPwd)
+	_, err = CmdExec(argocdCmd, "", "login", argoserver, "--insecure", "--username", argocdUser, "--password", argocdPass)
 	if err != nil {
 		log.Infof("Error in executing argocd login : %s ", err.Error())
 		return err
@@ -83,24 +88,20 @@ func loginArgoCDAPI() error {
 	return nil
 }
 
-func patchResource(kind, resourceName, namespace, appName string, patches []string) bool {
+func patchResource(kind, resourceName, namespace, appName string, patchBytes []byte) bool {
 	interlaceConfig, _ := config.GetInterlaceConfig()
 
-	argoserver := interlaceConfig.ArgocdServer
-
-	for _, patch := range patches {
-		_, err := CmdExec(argocdCmd, "", "app", "patch-resource", appName, "--server", argoserver,
-			"--kind", kind,
-			"--namespace", namespace,
-			"--resource-name", resourceName,
-			"--patch-type", "application/merge-patch+json",
-			"--patch", patch,
-		)
-		if err != nil {
-			log.Infof("Error in executing argocd apply patch : %s ", err.Error())
-			return false
-		}
-
+	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdApiBaseUrl, "https://")
+	_, err := CmdExec(argocdCmd, "", "app", "patch-resource", appName, "--server", argoserver,
+		"--kind", kind,
+		"--namespace", namespace,
+		"--resource-name", resourceName,
+		"--patch-type", patchType,
+		"--patch", string(patchBytes),
+	)
+	if err != nil {
+		log.Infof("Error in executing argocd apply patch : %s ", err.Error())
+		return false
 	}
 	log.Infof(" Applying argocd patches succeeded")
 	return true

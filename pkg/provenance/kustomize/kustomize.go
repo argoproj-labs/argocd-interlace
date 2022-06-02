@@ -32,6 +32,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
+	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	kustbuildutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/manifestbuild/kustomize"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -95,7 +96,7 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
 	subjects = append(subjects, in_toto.Subject{Name: target,
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256": targetDigest,
 		},
 	})
@@ -103,27 +104,27 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	materials := generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision,
 		appSourceCommitSha, string(provBytes))
 
-	entryPoint := "kustomize build"
-	recipe := in_toto.ProvenanceRecipe{
-		EntryPoint: entryPoint,
-		Arguments:  []string{appPath},
+	entryPoint := "kustomize"
+	invocation := intotoprov02.ProvenanceInvocation{
+		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
+		Parameters:   []string{"build", baseDir},
 	}
 
 	it := in_toto.Statement{
 		StatementHeader: in_toto.StatementHeader{
 			Type:          in_toto.StatementInTotoV01,
-			PredicateType: in_toto.PredicateSLSAProvenanceV01,
+			PredicateType: intotoprov02.PredicateSLSAProvenance,
 			Subject:       subjects,
 		},
-		Predicate: in_toto.ProvenancePredicate{
-			Metadata: &in_toto.ProvenanceMetadata{
+		Predicate: intotoprov02.ProvenancePredicate{
+			Metadata: &intotoprov02.ProvenanceMetadata{
 				Reproducible:    true,
 				BuildStartedOn:  &buildStartedOn,
 				BuildFinishedOn: &buildFinishedOn,
 			},
 
-			Materials: materials,
-			Recipe:    recipe,
+			Materials:  materials,
+			Invocation: invocation,
 		},
 	}
 	b, err := json.Marshal(it)
@@ -308,13 +309,13 @@ func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 	return true, nil
 }
 
-func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string, provTrace string) []in_toto.ProvenanceMaterial {
+func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string, provTrace string) []intotoprov02.ProvenanceMaterial {
 
-	materials := []in_toto.ProvenanceMaterial{}
+	materials := []intotoprov02.ProvenanceMaterial{}
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 		URI: appSourceRepoUrl + ".git",
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"commit":   string(appSourceCommitSha),
 			"revision": appSourceRevision,
 			"path":     appPath,
@@ -332,9 +333,9 @@ func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, app
 		commit := gjson.Get(mat.String(), "digest.commit").String()
 
 		if uri != appSourceRepoUrlFul {
-			intoMat := in_toto.ProvenanceMaterial{
+			intoMat := intotoprov02.ProvenanceMaterial{
 				URI: uri,
-				Digest: in_toto.DigestSet{
+				Digest: intotoprov02.DigestSet{
 					"commit":   commit,
 					"revision": revision,
 					"path":     path,

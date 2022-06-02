@@ -20,21 +20,19 @@ spec:
           imagePullPolicy: Always
           command:
             - argocd-interlace
-          args:
-            - --namespace=argocd
           volumeMounts:
             - name: output
               mountPath: /tmp/output
-            - name: signing-secrets
-              mountPath: /etc/signing-secrets
-            - name: keyring-secret
-              mountPath: /.gnupg/
+            - name: interlace-keys
+              mountPath: /etc/keys
+            - name: argocd-config
+              mountPath: /etc/config
       volumes:
-        - name: signing-secrets
+        - name: interlace-keys
           secret:
-            secretName: signing-secrets
-        - name: keyring-secret
+            secretName: argocd-interlace-keys
+        - name: argocd-config
           secret:
-            secretName: keyring-secret
+            secretName: argocd-config-secret
         - name: output
           emptyDir: {}

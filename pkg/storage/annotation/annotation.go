@@ -17,7 +17,8 @@
 package annotation
 
 import (
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -60,6 +61,13 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
 	signedManifestPath := filepath.Join(s.appData.AppDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
 
+	manifestBytes, err := ioutil.ReadFile(manifestPath)
+	if err != nil {
+		log.Errorf("Error in reading manifest: %s", err.Error())
+		return err
+	}
+	log.Debugf("manifest bytes: ", string(manifestBytes))
+
 	signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 
 	if err != nil {
@@ -70,6 +78,7 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
 
 	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
+	interlaceConfig, err := config.GetInterlaceConfig()
 
 	var annotations map[string]string
 	for _, item := range manifestYAMLs {
@@ -81,24 +90,32 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		}
 
 		kind := obj.GetKind()
+		// gv, err := schema.ParseGroupVersion(obj.GetAPIVersion())
+		// if err != nil {
+		// 	log.Errorf("failed to parse group version: %s", err.Error())
+		// }
 		resourceName := obj.GetName()
 		namespace := obj.GetNamespace()
 
 		resourceLabels := obj.GetLabels()
 
 		log.Info("kind :", kind, " resourceName ", resourceName, " namespace", namespace)
-		interlaceConfig, err := config.GetInterlaceConfig()
 
 		isSignatureresource := false
 		log.Info("resourceLabels ", resourceLabels)
 
 		if rscLabel, ok := resourceLabels[interlaceConfig.SignatureResourceLabel]; ok {
-			isSignatureresource, _ = strconv.ParseBool(rscLabel)
+			isSignatureresource, err = strconv.ParseBool(rscLabel)
+			if err != nil {
+				log.Errorf("failed to parse label value `%s`; err: %s", rscLabel, err.Error())
+			}
+
 		}
-
 		log.Info("isSignatureresource :", isSignatureresource)
-
 		if isSignatureresource {
+			if namespace == "" {
+				namespace = s.appData.AppDestinationNamespace
+			}
 			log.Info("Patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
 
 			annotations = k8smnfutil.GetAnnotationsInYAML(item)
@@ -121,6 +138,7 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
 			err = utils.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
+			// err = utils.PatchResource(s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
 
 			if err != nil {
 				log.Errorf("Error in patching application resource config: %s", err.Error())
@@ -138,31 +156,32 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	return nil
 }
 
-func preparePatch(message, signature, kind string) ([]string, error) {
+func preparePatch(message, signature, kind string) ([]byte, error) {
 
-	var patchData []string
+	patchData := map[string]interface{}{}
+	patchDataSub := map[string]interface{}{}
 	if kind == "ConfigMap" {
-
-		patchSig := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
-			"data", "signature", signature)
-		patchData = append(patchData, patchSig)
-		patchMsg := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
-			"data", "message", message)
-		patchData = append(patchData, patchMsg)
+		if message != "" {
+			patchDataSub["message"] = message
+		}
+		if signature != "" {
+			patchDataSub["signature"] = signature
+		}
+		patchData["data"] = patchDataSub
 	} else {
-		sigAnnot := utils.SIG_ANNOTATION_NAME
-		patchSig := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-			"metadata", "annotations", sigAnnot, signature)
-		patchData = append(patchData, patchSig)
-
 		msgAnnot := utils.MSG_ANNOTATION_NAME
-		patchMsg := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-			"metadata", "annotations", msgAnnot, message)
-
-		patchData = append(patchData, patchMsg)
+		if message != "" {
+			patchDataSub[msgAnnot] = message
+		}
+		sigAnnot := utils.SIG_ANNOTATION_NAME
+		if signature != "" {
+			patchDataSub[sigAnnot] = signature
+		}
+		patchData["metadata"] = map[string]interface{}{
+			"annotations": patchDataSub,
+		}
 	}
-
-	return patchData, nil
+	return json.Marshal(patchData)
 }
 
 func (s *StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {

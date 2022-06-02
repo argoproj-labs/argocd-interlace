@@ -47,7 +47,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 rules:
 - apiGroups:
   - argoproj.io
@@ -86,11 +86,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 subjects:
 - kind: ServiceAccount
   name: argocd-interlace-controller
@@ -98,32 +98,22 @@ subjects:
 ---
 apiVersion: v1
 data:
-  ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
-  ARGOCD_NAMESPACE: YXJnb2NkCg==
-  ARGOCD_PWD: UkVQTEFDRSBUSElTCg==
-  ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
+  ARGOCD_NAMESPACE: UkVQTEFDRSBUSElTCg==
+  ARGOCD_USER: UkVQTEFDRSBUSElTCg==
+  ARGOCD_USER_PWD: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
-  name: argocd-token-secret
-  namespace: argocd-interlace
-type: Opaque
----
-apiVersion: v1
-data:
-  pubring.gpg: UkVQTEFDRSBUSElTCg==
-kind: Secret
-metadata:
-  name: keyring-secret
+  name: argocd-config-secret
   namespace: argocd-interlace
 type: Opaque
 ---
 apiVersion: v1
 data:
   cosign.key: UkVQTEFDRSBUSElTCg==
-  cosign.pub: UkVQTEFDRSBUSElTCg==
+  pubring.gpg: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
-  name: signing-secrets
+  name: argocd-interlace-keys
   namespace: argocd-interlace
 type: Opaque
 ---
@@ -143,13 +133,13 @@ spec:
         app: argocd-interlace-controller
     spec:
       containers:
-      - args:
-        - --namespace=argocd
-        command:
+      - command:
         - argocd-interlace
         env:
         - name: DOCKER_CONFIG
           value: /tmp/.docker/
+        - name: TUF_ROOT
+          value: /tmp/.sigstore
         - name: MANIFEST_STORAGE_TYPE
           value: annotation
         - name: REKOR_SERVER
@@ -167,35 +157,15 @@ spec:
         - name: MANIFEST_ARGOCD_PROJECT
           value: default
         - name: SIGNATURE_RSC_LABEL
-          value: isSignatureResource
+          value: integrityshield.io/signatureResource
         - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
-          value: info
+          value: debug
         - name: ARGOCD_INTERLACE_LOG_LEVEL
-          value: info
-        - name: ARGOCD_NAMESPACE
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_NAMESPACE
-              name: argocd-token-secret
+          value: debug
         - name: ARGOCD_INTERLACE_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: ARGOCD_API_BASE_URL
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_API_BASE_URL
-              name: argocd-token-secret
-        - name: ARGOCD_TOKEN
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_TOKEN
-              name: argocd-token-secret
-        - name: ARGOCD_PWD
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_PWD
-              name: argocd-token-secret
         - name: HELM_PLUGINS
           value: /root/.local/share/helm/plugins
         image: ghcr.io/argoproj-labs/argocd-interlace-controller:dev
@@ -204,17 +174,17 @@ spec:
         volumeMounts:
         - mountPath: /tmp/output
           name: output
-        - mountPath: /etc/signing-secrets
-          name: signing-secrets
-        - mountPath: /.gnupg/
-          name: keyring-secret
+        - mountPath: /etc/keys
+          name: interlace-keys
+        - mountPath: /etc/config
+          name: argocd-config
       serviceAccountName: argocd-interlace-controller
       volumes:
-      - name: signing-secrets
+      - name: interlace-keys
         secret:
-          secretName: signing-secrets
-      - name: keyring-secret
+          secretName: argocd-interlace-keys
+      - name: argocd-config
         secret:
-          secretName: keyring-secret
+          secretName: argocd-config-secret
       - emptyDir: {}
         name: output
