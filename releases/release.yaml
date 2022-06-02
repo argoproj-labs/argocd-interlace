@@ -159,9 +159,9 @@ spec:
         - name: SIGNATURE_RSC_LABEL
           value: integrityshield.io/signatureResource
         - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
-          value: debug
+          value: info
         - name: ARGOCD_INTERLACE_LOG_LEVEL
-          value: debug
+          value: info
         - name: ARGOCD_INTERLACE_NAMESPACE
           valueFrom:
             fieldRef:
