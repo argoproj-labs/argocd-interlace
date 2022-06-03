@@ -38,7 +38,6 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
-	"github.com/sigstore/cosign/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 	"github.com/theupdateframework/go-tuf/encrypted"
 	"golang.org/x/term"
@@ -52,10 +51,6 @@ const (
 	cli              = "/usr/local/bin/rekor-cli"
 	publicKeyPEMType = "PUBLIC KEY"
 )
-
-type SignOpts struct {
-	Pf cosign.PassFunc
-}
 
 var (
 	// Read is for fuzzing
