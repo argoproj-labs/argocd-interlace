@@ -17,6 +17,7 @@
 package config
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -26,16 +27,24 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	configDir                 = "/etc/config"
-	argocdServerName          = "argocd-server"
-	openshiftGitopsServerName = "openshift-gitops-server"
-	placeholderText           = "REPLACE THIS"
+	configDir                        = "/etc/config"
+	argocdServerName                 = "argocd-server"
+	openshiftGitopsServerName        = "openshift-gitops-server"
+	argocdUserSecretName             = "argocd-initial-admin-secret"
+	openshiftGitopsUserSecretName    = "openshift-gitops-cluster"
+	argocdUserSecretDataKey          = "password"
+	openshiftGitopsUserSecretDataKey = "admin.password"
+	defaultUsername                  = "admin"
+	placeholderText                  = "REPLACE THIS"
 )
 
 type InterlaceConfig struct {
@@ -46,8 +55,8 @@ type InterlaceConfig struct {
 	ArgocdApiBaseUrl         string
 	ArgocdServer             string
 	ArgocdApiToken           string
-	ArgocdUser               string
-	ArgocdUserPwd            string
+	ArgocdAPIUser            string
+	ArgocdAPIPass            string
 	RekorServer              string
 	RekorTmpDir              string
 	ManifestAppSetMode       string
@@ -140,7 +149,7 @@ func newConfig() (*InterlaceConfig, error) {
 }
 
 func (c *InterlaceConfig) loadArgoCDNamespaceConfig() string {
-	nsBytes, err := ioutil.ReadFile(filepath.Join(configDir, "ARGOCD_NAMESPACE"))
+	nsBytes, err := ioutil.ReadFile(filepath.Join(configDir, "argocdNamespace"))
 	if err != nil {
 		log.Errorf("failed to load argocd namespace config: %s", err.Error())
 		return ""
@@ -148,19 +157,19 @@ func (c *InterlaceConfig) loadArgoCDNamespaceConfig() string {
 	return strings.TrimSuffix(string(nsBytes), "\n")
 }
 
-func (c *InterlaceConfig) loadArgoCDUsernameConfig() string {
-	userBytes, err := ioutil.ReadFile(filepath.Join(configDir, "ARGOCD_USER"))
+func (c *InterlaceConfig) loadArgoCDAPIUsernameConfig() string {
+	userBytes, err := ioutil.ReadFile(filepath.Join(configDir, "argocdAPIUsername"))
 	if err != nil {
-		log.Errorf("failed to load argocd username config: %s", err.Error())
+		log.Errorf("failed to load argocd api username config: %s", err.Error())
 		return ""
 	}
 	return strings.TrimSuffix(string(userBytes), "\n")
 }
 
-func (c *InterlaceConfig) loadArgoCDPasswordConfig() string {
-	passBytes, err := ioutil.ReadFile(filepath.Join(configDir, "ARGOCD_USER_PWD"))
+func (c *InterlaceConfig) loadArgoCDAPIPasswordConfig() string {
+	passBytes, err := ioutil.ReadFile(filepath.Join(configDir, "argocdAPIPassword"))
 	if err != nil {
-		log.Errorf("failed to load argocd password config: %s", err.Error())
+		log.Errorf("failed to load argocd api password config: %s", err.Error())
 		return ""
 	}
 	return strings.TrimSuffix(string(passBytes), "\n")
@@ -178,22 +187,58 @@ func (c *InterlaceConfig) checkAPIConnection() string {
 	return ""
 }
 
+func (c *InterlaceConfig) getArgoCDAPIUserInfoFromSecret() (string, string, error) {
+	clientset, _, err := utils.GetK8sClient("")
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to get kubernetes client")
+	}
+	argoSecretList, err := clientset.CoreV1().Secrets(c.ArgocdNamespace).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to list argocd secret")
+	}
+	found := false
+	var userSecret corev1.Secret
+	for _, s := range argoSecretList.Items {
+		secretName := s.GetName()
+		if secretName == argocdUserSecretName || secretName == openshiftGitopsUserSecretName {
+			userSecret = s
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", "", fmt.Errorf("failed to find the argocd user secret in %s namespace: either `%s` or `%s` must be there", c.ArgocdNamespace, argocdUserSecretName, openshiftGitopsUserSecretName)
+	}
+	username := defaultUsername
+	data := userSecret.Data
+	if passwordBytes, ok := data[argocdUserSecretDataKey]; ok {
+		return username, string(passwordBytes), nil
+	} else if passwordBytes, ok = data[openshiftGitopsUserSecretDataKey]; ok {
+		return username, string(passwordBytes), nil
+	} else {
+		return "", "", fmt.Errorf("failed to find argocd user password in the secret `%s`", userSecret.GetName())
+	}
+}
+
 func (c *InterlaceConfig) CheckReadiness() (bool, error) {
+	var err error
 	ns := c.loadArgoCDNamespaceConfig()
 	if ns == "" || ns == placeholderText {
 		return false, fmt.Errorf("`ARGOCD_NAMESPACE` is \"%s\" currently, please set this parameter", ns)
 	}
-	user := c.loadArgoCDUsernameConfig()
-	if ns == "" || ns == placeholderText {
-		return false, fmt.Errorf("`ARGOCD_USER` is \"%s\" currently, please set this parameter", user)
-	}
-	pass := c.loadArgoCDPasswordConfig()
-	if ns == "" || ns == placeholderText {
-		return false, fmt.Errorf("`ARGOCD_USER_PWD` is \"%s\" currently, please set this parameter", pass)
+	user := c.loadArgoCDAPIUsernameConfig()
+	pass := c.loadArgoCDAPIPasswordConfig()
+	isUserEmpty := (user == "" || user == placeholderText)
+	isPassEmpty := (pass == "" || pass == placeholderText)
+	if isUserEmpty && isPassEmpty {
+		user, pass, err = c.getArgoCDAPIUserInfoFromSecret()
+		if err != nil {
+			return false, errors.Wrap(err, "failed to get argocd api username and passowrd")
+		}
 	}
 	c.ArgocdNamespace = ns
-	c.ArgocdUser = user
-	c.ArgocdUserPwd = pass
+	c.ArgocdAPIUser = user
+	c.ArgocdAPIPass = pass
 	apiURL := c.checkAPIConnection()
 	if apiURL == "" {
 		return false, fmt.Errorf("failed to connect to ArgoCD API in %s namespace", ns)

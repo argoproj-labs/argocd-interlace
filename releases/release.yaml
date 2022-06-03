@@ -98,9 +98,9 @@ subjects:
 ---
 apiVersion: v1
 data:
-  ARGOCD_NAMESPACE: UkVQTEFDRSBUSElTCg==
-  ARGOCD_USER: UkVQTEFDRSBUSElTCg==
-  ARGOCD_USER_PWD: UkVQTEFDRSBUSElTCg==
+  argocdAPIPassword: UkVQTEFDRSBUSElTCg==
+  argocdAPIUsername: UkVQTEFDRSBUSElTCg==
+  argocdNamespace: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
   name: argocd-config-secret
@@ -109,8 +109,8 @@ type: Opaque
 ---
 apiVersion: v1
 data:
-  cosign.key: UkVQTEFDRSBUSElTCg==
-  pubring.gpg: UkVQTEFDRSBUSElTCg==
+  signKey: UkVQTEFDRSBUSElTCg==
+  verifyKey: UkVQTEFDRSBUSElTCg==
 kind: Secret
 metadata:
   name: argocd-interlace-keys

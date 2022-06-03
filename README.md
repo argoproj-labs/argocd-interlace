@@ -26,18 +26,17 @@ $ kubectl apply -f https://raw.githubusercontent.com/argoproj-labs/argocd-interl
 ```
 
 Then ArgoCD Interlace gets running and it is waiting for your setup now.
-You can setup just by the following 2 kubectl patch commands. 5 inputs variables are required for them.
+You can setup just by the following 2 kubectl patch commands. 3 inputs variables are required for them.
 
 - `ARGOCD_NAMESPACE` ... the namespace where ArgoCD is running ("argocd" by default installation)
-- `ARGOCD_USERNAME` & `ARGOCD_PASSWORD` ... ArgoCD admin username and passowrd (username is "admin" by default)
 - `VERIFY_KEY_PATH` ... verification key for source repository content signature
 - `SIGN_KEY_PATH` ... signing key for the generated policies
 (for details about key setup, refer to [Key Setup](docs/key_setup.md).)
 
 ```
-$ kubectl patch secret argocd-config-secret -n argocd-interlace -p="{\"data\":{\"ARGOCD_NAMESPACE\":\"$(echo -n $ARGOCD_NAMESPACE | base64)\",\"ARGOCD_USER\":\"$(echo -n $ARGOCD_USERNAME | base64)\",\"ARGOCD_USER_PWD\":\"$(echo -n $ARGOCD_PASSWORD | base64)\"}}"
+$ kubectl patch secret argocd-config-secret -n argocd-interlace -p="{\"data\":{\"argocdNamespace\":\"$(echo -n $ARGOCD_NAMESPACE | base64)\"}}"
 
-$ kubectl patch secret argocd-interlace-keys -n argocd-interlace -p="{\"data\":{\"cosign.key\":\"$(cat $SIGN_KEY_PATH | base64)\",\"pubring.gpg\":\"$(cat $VERIFY_KEY_PATH | base64)\"}}"
+$ kubectl patch secret argocd-interlace-keys -n argocd-interlace -p="{\"data\":{\"signKey\":\"$(cat $SIGN_KEY_PATH | base64)\",\"verifyKey\":\"$(cat $VERIFY_KEY_PATH | base64)\"}}"
 ```
 
 Once 2 secrets are patched by the 2 commands above, ArgoCD Interlace is ready!

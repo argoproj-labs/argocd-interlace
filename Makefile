@@ -6,10 +6,11 @@ ifeq ($(IMG_VERSION), )
 endif
 
 ARGOCD_NAMESPACE ?= ""
-USE_EXAMPLE_KEYS ?= false
-OPENSHIFT_GITOPS ?= ""
-CREATE_ARGOCD_USER ?= false
-ARGOCD_URL ?= ""
+ARGOCD_API_USERNAME ?= ""
+ARGOCD_API_PASSWORD ?= ""
+SIGN_KEY_PATH ?= ""
+VERIFY_KEY_PATH ?= ""
+
 
 TMP_DIR=/tmp/
 
@@ -40,7 +41,7 @@ deploy: set-variables check-argocd
 	@echo ---------------------------------
 	@echo configuring argocd-interlace
 	@echo ---------------------------------
-	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(USE_EXAMPLE_KEYS) $(OPENSHIFT_GITOPS) $(CREATE_ARGOCD_USER) $(ARGOCD_URL)
+	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(ARGOCD_API_USERNAME) $(ARGOCD_API_PASSWORD) $(SIGN_KEY_PATH) $(VERIFY_KEY_PATH)
 	@echo ---------------------------------
 	@echo done!
 

@@ -23,6 +23,7 @@ import (
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/mapnode"
 	log "github.com/sirupsen/logrus"
@@ -37,7 +38,7 @@ func GenerateInitialManifest(appData application.ApplicationData) (bool, error) 
 	appDirPath := appData.AppDirPath
 
 	// Retrive the desired state of manifest via argocd API call
-	desiredManifests, err := utils.RetriveDesiredManifest(appName)
+	desiredManifests, err := argoutil.RetriveDesiredManifest(appName)
 	if err != nil {
 		log.Errorf("Error in retriving desired manifest : %s", err.Error())
 		return false, err
@@ -68,7 +69,7 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(yamlBytes)
 
 	// Retrive the desired state of manifest via argocd API call
-	desiredManifests, err := utils.RetriveDesiredManifest(appData.AppName)
+	desiredManifests, err := argoutil.RetriveDesiredManifest(appData.AppName)
 	if err != nil {
 		log.Errorf("Error in retriving desired manifest : %s", err.Error())
 		return false, err

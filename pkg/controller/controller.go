@@ -52,7 +52,7 @@ type controller struct {
 func Start(ctx context.Context, kubeconfig string, config *interlaceCfg.InterlaceConfig) {
 	configBytes, _ := json.Marshal(config)
 	log.Debugf("Interlace config: %s", string(configBytes))
-	_, cfg, err := utils.GetClient(kubeconfig)
+	_, cfg, err := utils.GetK8sClient(kubeconfig)
 	appClientset := appClientset.NewForConfigOrDie(cfg)
 	if err != nil {
 		log.Fatalf("Error in starting argocd interlace controller: %s", err.Error())

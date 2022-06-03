@@ -30,6 +30,7 @@ import (
 	kustprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/kustomize"
 	"github.com/argoproj-labs/argocd-interlace/pkg/sign"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	"github.com/ghodss/yaml"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
@@ -137,8 +138,8 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
-			err = utils.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
-			// err = utils.PatchResource(s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
+			err = argoutil.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
+			// err = argoutil.PatchResource(interlaceConfig.ArgocdApiBaseUrl, s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
 
 			if err != nil {
 				log.Errorf("Error in patching application resource config: %s", err.Error())
