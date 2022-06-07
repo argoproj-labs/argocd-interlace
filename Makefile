@@ -6,15 +6,24 @@ USE_EXAMPLE_KEYS ?= false
 VERSION=dev
 TMP_DIR=/tmp/
 
-.PHONY: build deploy undeploy check-argocd
+.PHONY: lint bin image build deploy undeploy check-argocd
 
-build:
+lint:
+	@golangci-lint version
+	@echo linting go code...
+	@golangci-lint run --fix --timeout 6m
+
+bin:
 	@echo building binary for image
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags="-s -w" -a -o build/_bin/argocd-interlace ./cmd/core
+
+image:
 	@echo building image
 	docker build -t $(IMG_NAME):$(VERSION) .
 	docker push $(IMG_NAME):$(VERSION)
 	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(VERSION)
+
+build: bin image
 
 deploy: check-argocd
 	@echo ---------------------------------
