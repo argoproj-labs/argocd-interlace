@@ -1,10 +1,18 @@
-IMG_NAME=ghcr.io/hirokuni-kitahara/argocd-interlace-controller
+IMG_NAME=ghcr.io/argoproj-labs/argocd-interlace-controller
+IMG_VERSION ?= 
+GIT_VERSION ?= $(shell git describe --tags --always --dirty)
+ifeq ($(IMG_VERSION), )
+    IMG_VERSION = $(GIT_VERSION)
+endif
 
 ARGOCD_NAMESPACE ?= argocd
 USE_EXAMPLE_KEYS ?= false
 
-VERSION=dev
 TMP_DIR=/tmp/
+
+
+build-dry:
+	@echo $(IMG_NAME):$(IMG_VERSION)
 
 .PHONY: lint bin image build deploy undeploy check-argocd
 
@@ -19,9 +27,9 @@ bin:
 
 image:
 	@echo building image
-	docker build -t $(IMG_NAME):$(VERSION) .
-	docker push $(IMG_NAME):$(VERSION)
-	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(VERSION)
+	docker build -t $(IMG_NAME):$(IMG_VERSION) .
+	docker push $(IMG_NAME):$(IMG_VERSION)
+	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(IMG_VERSION)
 
 build: bin image
 
