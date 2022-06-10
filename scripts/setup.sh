@@ -20,8 +20,15 @@ if ! [ -x "$(command -v kubectl)" ]; then
     exit 1
 fi
 
+userinfo=""
+if [[ $ARGOCD_API_USERNAME != "" ]]; then
+    if [[ $ARGOCD_API_PASSWORD != "" ]]; then
+        userinfo=",\"argocdAPIUsername\":\"$(echo -n $ARGOCD_API_USERNAME | base64)\",\"argocdAPIPassword\":\"$(echo -n $ARGOCD_API_PASSWORD | base64)\""
+    fi
+fi
+
 # configure argocd API token to `argocd-config-secret`
-kubectl patch secret argocd-config-secret -n argocd-interlace -p="{\"data\":{\"argocdNamespace\":\"$(echo -n $ARGOCD_NAMESPACE | base64)\",\"argocdAPIUser\":\"$(echo -n $ARGOCD_API_USERNAME | base64)\",\"argocdAPIPassword\":\"$(echo -n $ARGOCD_API_PASSWORD | base64)\"}}"
+kubectl patch secret argocd-config-secret -n argocd-interlace -p="{\"data\":{\"argocdNamespace\":\"$(echo -n $ARGOCD_NAMESPACE | base64)\"$(echo -n $userinfo)}}"
 
 # configure `argocd-interlace-keys`
 kubectl patch secret argocd-interlace-keys -n argocd-interlace -p="{\"data\":{\"signKey\":\"$(cat $SIGN_KEY_PATH | base64)\",\"verifyKey\":\"$(cat $VERIFY_KEY_PATH | base64)\"}}"

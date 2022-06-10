@@ -80,19 +80,13 @@ func getRepoInfo(repoUrl string) (string, string) {
 }
 
 func GetRepoCredentials(repoUrl string) string {
-
 	interlaceConfig, err := config.GetInterlaceConfig()
 	if err != nil {
 		log.Errorf("error when getting interlace config %s", err.Error())
 		return ""
 	}
 
-<<<<<<< Updated upstream
 	_, cfg, err := utils.GetK8sClient("")
-
-=======
-	_, cfg, err := utils.GetClient("")
->>>>>>> Stashed changes
 	if err != nil {
 		log.Errorf("Error occured while reading incluster kubeconfig %s", err.Error())
 		return ""
