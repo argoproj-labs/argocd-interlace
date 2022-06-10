@@ -3,17 +3,17 @@ module github.com/argoproj-labs/argocd-interlace
 go 1.16
 
 require (
+	github.com/ProtonMail/go-crypto v0.0.0-20210707164159-52430bf6b52c
 	github.com/argoproj/argo-cd/v2 v2.3.4
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/in-toto/in-toto-golang v0.3.4-0.20211211042327-af1f9fb822bf
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.3.1
-	github.com/sigstore/k8s-manifest-sigstore v0.2.0
+	github.com/sigstore/k8s-manifest-sigstore v0.3.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.4.0
 	github.com/theupdateframework/go-tuf v0.0.0-20220211205608-f0c3294f63b9
 	github.com/tidwall/gjson v1.9.3
-	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.23.5

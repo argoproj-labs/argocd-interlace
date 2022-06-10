@@ -36,8 +36,13 @@ import (
 	kustbuildutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/manifestbuild/kustomize"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/packet"
+
+	// package golang.org/x/crypto/openpgp is deprecated: this package is unmaintained except for security fixes.
+	// New applications should consider a more focused, modern alternative to OpenPGP for their specific task.
+	// If you are required to interoperate with OpenPGP systems and need a maintained package, consider a community fork.
+	// See https://golang.org/issue/44226.
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 type Provenance struct {
@@ -91,6 +96,10 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	}
 
 	provBytes, err := json.Marshal(prov)
+	if err != nil {
+		log.Errorf("error when marshaling provenance:  %s", err.Error())
+		return err
+	}
 
 	subjects := []in_toto.Subject{}
 
@@ -156,6 +165,10 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 
 	interlaceConfig, err := config.GetInterlaceConfig()
+	if err != nil {
+		log.Errorf("error when getting interlace config:  %s", err.Error())
+		return false, err
+	}
 
 	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
 
@@ -181,7 +194,15 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
 
 	verification_target, err := os.Open(srcMatPath)
+	if err != nil {
+		log.Errorf("error when opening source material digest file:  %s", err.Error())
+		return false, err
+	}
 	signature, err := os.Open(srcMatSigPath)
+	if err != nil {
+		log.Errorf("error when opening source material signature file:  %s", err.Error())
+		return false, err
+	}
 	flag, _, _, _, _ := verifySignature(keyPath, verification_target, signature)
 
 	hashCompareSuccess := false
@@ -204,7 +225,7 @@ func verifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, 
 
 	if keyRing, err := LoadKeyRing(keyPath); err != nil {
 		return false, "Error when loading key ring", nil, nil, err
-	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig); signer == nil {
+	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig, nil); signer == nil {
 		if err != nil {
 			log.Error("Signature verification error:", err.Error())
 		}

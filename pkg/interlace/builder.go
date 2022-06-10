@@ -42,8 +42,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const provenanceAnnotationKey = "interlace.argocd.dev/provenance"
-
 func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientset.Interface, interlaceNS string) error {
 
 	appName := app.ObjectMeta.Name
@@ -195,8 +193,6 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 			log.Info("releaseName", releaseName)
 			log.Info("version", version)
 			appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
-		} else {
-			appPath = newApp.Spec.Source.Path
 		}
 
 		appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
@@ -373,7 +369,7 @@ func createOrUpdateApplicationProvenance(appProvClientset appprovClientset.Inter
 	}
 	provData, err := base64.StdEncoding.DecodeString(string(b64ProvData))
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to get decode the base64 encoded provenance data"))
+		return errors.Wrap(err, "failed to get decode the base64 encoded provenance data")
 	}
 	appprovExists := false
 	current, err := appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Get(context.TODO(), appprovName, metav1.GetOptions{})

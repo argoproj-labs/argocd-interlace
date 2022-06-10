@@ -32,6 +32,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -188,6 +189,9 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 func (s *StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
+	if err != nil {
+		return errors.Wrap(err, "error when computing hash values of source repo contents")
+	}
 
 	var prov provenance.Provenance
 	if s.appData.IsHelm {

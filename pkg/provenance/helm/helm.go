@@ -151,6 +151,10 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	mkDirCmd := "mkdir"
 	_, err := utils.CmdExec(mkDirCmd, "", appPath)
+	if err != nil {
+		log.Infof("mkdir returns error : %s ", err.Error())
+		return false, err
+	}
 	helmChartUrl := fmt.Sprintf("%s/%s-%s.tgz", repoUrl, chart, targetRevision)
 
 	chartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
