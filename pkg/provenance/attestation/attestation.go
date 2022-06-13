@@ -65,7 +65,7 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		return nil, err
 	}
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(utils.PRIVATE_KEY_PATH))
+	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(config.PRIVATE_KEY_PATH))
 	if err != nil {
 		log.Errorf("Error in reading private key:  %s", err.Error())
 		return nil, err
@@ -118,13 +118,13 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 
 	log.Debug("attestation.json", string(eb))
 
-	err = utils.WriteToFile(string(eb), appDirPath, utils.ATTESTATION_FILE_NAME)
+	err = utils.WriteToFile(string(eb), appDirPath, config.ATTESTATION_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing attestation to a file: %s", err.Error())
 		return nil, err
 	}
 
-	attestationPath := filepath.Join(appDirPath, utils.ATTESTATION_FILE_NAME)
+	attestationPath := filepath.Join(appDirPath, config.ATTESTATION_FILE_NAME)
 
 	var provRef *provenance.ProvenanceRef
 	if uploadTLog {

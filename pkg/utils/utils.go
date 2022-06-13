@@ -32,19 +32,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const (
-	MANIFEST_FILE_NAME        = "manifest.yaml"
-	MANIFEST_DIR              = "manifest-bundles"
-	SIGNED_MANIFEST_FILE_NAME = "manifest.signed"
-	PROVENANCE_FILE_NAME      = "provenance.yaml"
-	ATTESTATION_FILE_NAME     = "attestation.json"
-	TMP_DIR                   = "/tmp/output"
-	PRIVATE_KEY_PATH          = "/etc/keys/signKey"
-	KEYRING_PUB_KEY_PATH      = "/etc/keys/verifyKey"
-	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
-	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
-)
-
 //GetK8sClient returns a kubernetes client and config
 func GetK8sClient(configpath string) (*kubernetes.Clientset, *rest.Config, error) {
 

@@ -59,9 +59,9 @@ func (s *StorageBackend) GetLatestManifestContent() ([]byte, error) {
 
 func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
-	keyPath := utils.PRIVATE_KEY_PATH
-	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
-	signedManifestPath := filepath.Join(s.appData.AppDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
+	keyPath := config.PRIVATE_KEY_PATH
+	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
+	signedManifestPath := filepath.Join(s.appData.AppDirPath, config.SIGNED_MANIFEST_FILE_NAME)
 
 	manifestBytes, err := ioutil.ReadFile(manifestPath)
 	if err != nil {
@@ -125,8 +125,8 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 			message := "null"
 			signature := "null"
 			if sourceVerifed {
-				message = annotations[utils.MSG_ANNOTATION_NAME]
-				signature = annotations[utils.SIG_ANNOTATION_NAME]
+				message = annotations[config.MSG_ANNOTATION_NAME]
+				signature = annotations[config.SIG_ANNOTATION_NAME]
 			}
 
 			patchData, err := preparePatch(message, signature, kind)
@@ -171,11 +171,11 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 		}
 		patchData["data"] = patchDataSub
 	} else {
-		msgAnnot := utils.MSG_ANNOTATION_NAME
+		msgAnnot := config.MSG_ANNOTATION_NAME
 		if message != "" {
 			patchDataSub[msgAnnot] = message
 		}
-		sigAnnot := utils.SIG_ANNOTATION_NAME
+		sigAnnot := config.SIG_ANNOTATION_NAME
 		if signature != "" {
 			patchDataSub[sigAnnot] = signature
 		}
@@ -187,7 +187,7 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 }
 
 func (s *StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
-	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
+	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
 	if err != nil {
 		return errors.Wrap(err, "error when computing hash values of source repo contents")

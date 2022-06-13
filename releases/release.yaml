@@ -136,10 +136,6 @@ spec:
       - command:
         - argocd-interlace
         env:
-        - name: DOCKER_CONFIG
-          value: /tmp/.docker/
-        - name: TUF_ROOT
-          value: /tmp/.sigstore
         - name: MANIFEST_STORAGE_TYPE
           value: annotation
         - name: REKOR_SERVER
@@ -172,8 +168,6 @@ spec:
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:
-        - mountPath: /tmp/output
-          name: output
         - mountPath: /etc/keys
           name: interlace-keys
         - mountPath: /etc/config
@@ -186,5 +180,3 @@ spec:
       - name: argocd-config
         secret:
           secretName: argocd-config-secret
-      - emptyDir: {}
-        name: output

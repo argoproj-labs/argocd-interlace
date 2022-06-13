@@ -76,7 +76,7 @@ Once 2 secrets are patched by the 2 commands above, ArgoCD Interlace is ready!
         "predicateType": "https://slsa.dev/provenance/v0.1",
         "subject": [
             {
-                "name": "/tmp/output/sample-app/manifest.yaml",
+                "name": "/tmp/workspace2689764547/sample-app/manifest.yaml",
                 "digest": {
                     "sha256": "72d33174b97b178a035a16f04518ff971b1edb3d1b603c858f11e0f12befb8ca"
                 }

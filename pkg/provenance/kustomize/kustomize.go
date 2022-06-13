@@ -67,9 +67,10 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	appSourceRevision := p.appData.AppSourceRevision
 	appSourceCommitSha := p.appData.AppSourceCommitSha
 
-	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
+	interlaceConfig, _ := config.GetInterlaceConfig()
+	appDirPath := filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 
-	manifestFile := filepath.Join(appDirPath, utils.MANIFEST_FILE_NAME)
+	manifestFile := filepath.Join(appDirPath, config.MANIFEST_FILE_NAME)
 	recipeCmds := []string{"", ""}
 
 	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
@@ -142,7 +143,7 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 		return err
 	}
 
-	err = utils.WriteToFile(string(b), appDirPath, utils.PROVENANCE_FILE_NAME)
+	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
 		return err
@@ -188,7 +189,7 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	keyPath := utils.KEYRING_PUB_KEY_PATH
+	keyPath := config.KEYRING_PUB_KEY_PATH
 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)

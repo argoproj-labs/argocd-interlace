@@ -21,8 +21,6 @@ spec:
           command:
             - argocd-interlace
           volumeMounts:
-            - name: output
-              mountPath: /tmp/output
             - name: interlace-keys
               mountPath: /etc/keys
             - name: argocd-config
@@ -34,5 +32,3 @@ spec:
         - name: argocd-config
           secret:
             secretName: argocd-config-secret
-        - name: output
-          emptyDir: {}

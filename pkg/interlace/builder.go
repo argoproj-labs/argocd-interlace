@@ -34,7 +34,6 @@ import (
 	kustprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/kustomize"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
-	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -57,6 +56,8 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 		appSourceCommitSha = commitSha
 	}
 
+	interlaceConfig, _ := config.GetInterlaceConfig()
+
 	log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
 	appPath := ""
 	appDirPath := ""
@@ -66,8 +67,8 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 	var version string
 	isHelm := app.Spec.Source.IsHelm()
 	if isHelm {
-		appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
-		appDirPath = filepath.Join(utils.TMP_DIR, appName)
+		appPath = filepath.Join(interlaceConfig.WorkspaceDir, appName)
+		appDirPath = appPath
 
 		//ValuesFiles is a list of Helm value files to use when generating a template
 		valueFiles = app.Spec.Source.Helm.ValueFiles
@@ -80,7 +81,7 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 
 	} else {
 		appPath = app.Spec.Source.Path
-		appDirPath = filepath.Join(utils.TMP_DIR, appName, appPath)
+		appDirPath = filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 
 	}
 
@@ -156,6 +157,8 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 		generateManifest = true
 	}
 
+	interlaceConfig, _ := config.GetInterlaceConfig()
+
 	if generateManifest {
 
 		appName := newApp.ObjectMeta.Name
@@ -192,10 +195,10 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 			log.Info("len(valueFiles)", len(valueFiles))
 			log.Info("releaseName", releaseName)
 			log.Info("version", version)
-			appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
+			appPath = filepath.Join(interlaceConfig.WorkspaceDir, appName)
 		}
 
-		appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
+		appDirPath := filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 		chart := newApp.Spec.Source.Chart
 		appData, _ := application.NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
 			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,

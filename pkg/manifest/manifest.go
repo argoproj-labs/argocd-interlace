@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
@@ -50,7 +51,7 @@ func GenerateInitialManifest(appData application.ApplicationData) (bool, error) 
 	}
 
 	if finalManifest != "" {
-		err := utils.WriteToFile(string(finalManifest), appDirPath, utils.MANIFEST_FILE_NAME)
+		err := utils.WriteToFile(string(finalManifest), appDirPath, config.MANIFEST_FILE_NAME)
 		if err != nil {
 			log.Errorf("Error in writing manifest to file: %s", err.Error())
 			return false, err
@@ -93,7 +94,7 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	}
 
 	if finalManifest != "" {
-		err := utils.WriteToFile(string(finalManifest), appData.AppDirPath, utils.MANIFEST_FILE_NAME)
+		err := utils.WriteToFile(string(finalManifest), appData.AppDirPath, config.MANIFEST_FILE_NAME)
 		if err != nil {
 			log.Errorf("Error in writing manifest to file: %s", err.Error())
 			return false, err

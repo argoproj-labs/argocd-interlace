@@ -47,6 +47,18 @@ const (
 	placeholderText                  = "REPLACE THIS"
 )
 
+const (
+	MANIFEST_FILE_NAME        = "manifest.yaml"
+	MANIFEST_DIR              = "manifest-bundles"
+	SIGNED_MANIFEST_FILE_NAME = "manifest.signed"
+	PROVENANCE_FILE_NAME      = "provenance.yaml"
+	ATTESTATION_FILE_NAME     = "attestation.json"
+	PRIVATE_KEY_PATH          = "/etc/keys/signKey"
+	KEYRING_PUB_KEY_PATH      = "/etc/keys/verifyKey"
+	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
+	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
+)
+
 type InterlaceConfig struct {
 	LogLevel                 string
 	ManifestStorageType      string
@@ -66,6 +78,7 @@ type InterlaceConfig struct {
 	SourceMaterialSignature  string
 	AlwaysGenerateProv       bool
 	SignatureResourceLabel   string
+	WorkspaceDir             string
 }
 
 var instance *InterlaceConfig
@@ -121,6 +134,11 @@ func newConfig() (*InterlaceConfig, error) {
 		return nil, errors.New("SIGNATURE_RSC_LABEL is empty, please specify in configuration !")
 	}
 
+	workspaceDir, err := ioutil.TempDir("", "workspace")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create a workspace directory")
+	}
+
 	config := &InterlaceConfig{
 		LogLevel:                 logLevel,
 		ManifestStorageType:      manifestStorageType,
@@ -129,6 +147,7 @@ func newConfig() (*InterlaceConfig, error) {
 		SourceMaterialSignature:  sourceHashSignature,
 		AlwaysGenerateProv:       alwayGenProv,
 		SignatureResourceLabel:   signRscLabel,
+		WorkspaceDir:             workspaceDir,
 	}
 
 	if manifestStorageType == "annotation" {

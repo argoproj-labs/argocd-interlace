@@ -6,13 +6,10 @@ ifeq ($(IMG_VERSION), )
 endif
 
 ARGOCD_NAMESPACE ?= ""
-ARGOCD_API_USERNAME ?= ""
-ARGOCD_API_PASSWORD ?= ""
 SIGN_KEY_PATH ?= ""
 VERIFY_KEY_PATH ?= ""
-
-
-TMP_DIR=/tmp/
+ARGOCD_API_USERNAME ?= ""	# optional
+ARGOCD_API_PASSWORD ?= ""	# optional
 
 .PHONY: lint bin image build deploy undeploy check-argocd set-variables test-deploy
 
@@ -74,14 +71,6 @@ ifeq ($(OPENSHIFT_GITOPS), "")
 	$(eval ARGO_TYPE = $(shell scripts/detect-argocd-type.sh $(ARGOCD_NAMESPACE)))
 	$(eval OPENSHIFT_GITOPS = $(if $(filter openshift-gitops, $(ARGO_TYPE)), true, false))
 endif
-
-lint-init:
-	 golangci-lint run --timeout 5m -D errcheck,unused,gosimple,deadcode,staticcheck,structcheck,ineffassign,varcheck > $(TMP_DIR)lint_results_interlace.txt
-
-lint-verify:
-	$(eval FAILURES=$(shell cat $(TMP_DIR)lint_results_interlace.txt | grep "FAIL:"))
-	cat  $(TMP_DIR)lint_results_interlace.txt
-	@$(if $(strip $(FAILURES)), echo "One or more linters failed. Failures: $(FAILURES)"; exit 1, echo "All linters are passed successfully."; exit 0)
 
 noop:
 	@echo do nothing

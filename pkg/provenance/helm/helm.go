@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
@@ -93,7 +94,7 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 		return err
 	}
 
-	err = utils.WriteToFile(string(b), appDirPath, utils.PROVENANCE_FILE_NAME)
+	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
 		return err
