@@ -92,10 +92,6 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		}
 
 		kind := obj.GetKind()
-		// gv, err := schema.ParseGroupVersion(obj.GetAPIVersion())
-		// if err != nil {
-		// 	log.Errorf("failed to parse group version: %s", err.Error())
-		// }
 		resourceName := obj.GetName()
 		namespace := obj.GetNamespace()
 

@@ -38,7 +38,7 @@ deploy: set-variables check-argocd
 	@echo ---------------------------------
 	@echo configuring argocd-interlace
 	@echo ---------------------------------
-	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(ARGOCD_API_USERNAME) $(ARGOCD_API_PASSWORD) $(SIGN_KEY_PATH) $(VERIFY_KEY_PATH)
+	@./scripts/setup.sh $(ARGOCD_NAMESPACE) $(SIGN_KEY_PATH) $(VERIFY_KEY_PATH) $(ARGOCD_API_USERNAME) $(ARGOCD_API_PASSWORD)
 	@echo ---------------------------------
 	@echo done!
 

@@ -130,7 +130,7 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	if uploadTLog {
 		// public key file is required to upload the attestation
 		pub := intotoSigner.Public()
-		pubkeyPath, err := savePubkey(pub)
+		pubkeyPath, err := savePubkeyAsTemporaryFile(pub)
 		if err != nil {
 			log.Errorf("Error in saving public key: %s", err.Error())
 			return nil, err
@@ -293,7 +293,7 @@ func run(stdin, cmd string, arg ...string) string {
 	return string(b)
 }
 
-func savePubkey(pubkey crypto.PublicKey) (string, error) {
+func savePubkeyAsTemporaryFile(pubkey crypto.PublicKey) (string, error) {
 	f, err := ioutil.TempFile("", "publickey")
 	if err != nil {
 		return "", err

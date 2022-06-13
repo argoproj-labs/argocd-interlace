@@ -114,8 +114,7 @@ To customize settings of ArgoCD Interlace, you can follow these documents:
 * [ArgoCD REST API authentication for querying ArgoCD REST API to retrive desired manifest for an application](docs/argo_setup.md)
 * [Configuring source material repository](docs/configure_source_materials.md)
 * [Signing source materials](docs/configure_source_materials.md)
-* [Cosign based signing keys for creating signature for desired manifest.](docs/signing_key_setup.md)
-* [Verification key setup for verifying source materials](docs/verification_key_setup.md)
+* [Key Setup (Signing key and Verification key)](docs/key_setup.md)
 
 
 ## Example Scenario

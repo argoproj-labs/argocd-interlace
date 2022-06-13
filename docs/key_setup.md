@@ -3,6 +3,8 @@
 ArgoCD Interlace uses 2 key files for source repo verification and for manifest signing respectively.
 These 2 keys are required in the [installation](../README.md#Installation) step.
 
+Once those 2 key files (`pubring.gpg` and `cosign.key` in the following instruction) get ready, you can just use the 2 filepaths in the installation command.
+
 #### For source repo verification
 
 A GPG verification key is required for the source repo verification.
