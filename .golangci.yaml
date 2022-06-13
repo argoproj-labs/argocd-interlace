@@ -18,9 +18,12 @@ run:
 
 linters:
   enable:
-    - gocyclo
-    - errcheck
-    - godox
+  - asciicheck
+  - deadcode
+  - depguard
+  - errcheck
+  - gofmt
+  - goimports
 # all available settings of specific linters
 linters-settings:
   errcheck:

@@ -58,9 +58,12 @@ func ApplyResourcePatch(kind, resourceName, namespace, appName string, patchByte
 		result := patchResource(kind, resourceName, namespace, appName, patchBytes)
 		return result, nil
 	})
+	if err != nil {
+		return err
+	}
 
-	if result == true {
-		log.Info("Patching completed result: %s", result)
+	if result {
+		log.Infof("Patching completed result: %v", result)
 	}
 	return nil
 }
@@ -75,7 +78,7 @@ func retry(attempts int, sleep time.Duration, f func() (bool, error)) (err error
 		}
 		res, _ := f()
 
-		if res == true {
+		if res {
 			break
 		}
 	}

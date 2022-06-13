@@ -68,7 +68,7 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		log.Errorf("Error in reading manifest: %s", err.Error())
 		return err
 	}
-	log.Debugf("manifest bytes: ", string(manifestBytes))
+	log.Debugf("manifest bytes: %s", string(manifestBytes))
 
 	signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 
