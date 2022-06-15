@@ -16,7 +16,7 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.1.0-22-g606f3e9-dirty
+          image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.2.0
           imagePullPolicy: Always
           command:
             - argocd-interlace

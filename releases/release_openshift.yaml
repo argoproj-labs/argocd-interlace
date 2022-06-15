@@ -169,7 +169,7 @@ spec:
           value: openshift-gitops-cluster
         - name: ARGOCD_USER_SECRET_PASSFIELD
           value: admin.password
-        image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.1.0-22-g606f3e9-dirty
+        image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.2.0
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:
