@@ -91,7 +91,7 @@ For more details about the provenance data, you can refer this [doc](docs/proven
 
 ### Additional Features
 
-ArgoCD Interlace supports 2 other features than the one about provenance records.
+ArgoCD Interlace supports 3 other features other than provenance recording.
 
 **1. Verify source material contents before generating provenance**
 
