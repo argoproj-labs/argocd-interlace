@@ -100,7 +100,7 @@ For that, you can sign the source meterials (Git Repo / Helm) beforehand (see th
 This allows you to confirm that the source contents of the synced application is valid by verifying the signature.
 
 You can enable this feature by configuring the secret `source-material-verify-key` in argocd-interlace namespace.
-You can do it by the following command. `<PATH/TO/PUBLIC_KEY>` should be the actual filepath.
+You can do it by the following command. `<PATH/TO/PUBLIC_KEY>` should be the actual filepath (refer [this](docs/key_setup.md) about key setup).
 
 ```
 $ KEY_PATH=<PATH/TO/PUBLIC_KEY> kubectl patch secret source-material-verify-key -n argocd-interlace -p="{\"data\":{\"public_key_pem\":\""(cat $KEY_PATH | base64)"\"}}"
@@ -116,7 +116,7 @@ By default, ArgoCD Interlace just generates a provenance data and the data is no
 You can enable signing feature for the generated provenance data so that the provenance data can be verified when it is used somewhere other than ArgoCD / ArgoCD Interlace.
 
 By configuring the secret `interlace-signing-key` in argocd-interlace namespace, you can enable this.
-You can do it by the following command. `<PATH/TO/PRIVATE_KEY>` should be the actual filepath.
+You can do it by the following command. `<PATH/TO/PRIVATE_KEY>` should be the actual filepath (refer [this](docs/key_setup.md) about key setup).
 
 ```
 $ KEY_PATH=<PATH/TO/PRIVATE_KEY> kubectl patch secret interlace-signing-key -n argocd-interlace -p="{\"data\":{\"private_key_pem\":\""(cat $KEY_PATH | base64)"\"}}"
