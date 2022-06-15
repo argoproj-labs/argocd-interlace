@@ -20,35 +20,62 @@ import (
 	"time"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
+	"github.com/argoproj-labs/argocd-interlace/pkg/storage/resource"
 )
+
+var configuredStorageBackends = []string{
+	annotation.StorageBackendAnnotation,
+	resource.StorageBackendResource,
+}
 
 type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
 	StoreManifestBundle(sourceVerifed bool) error
-	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error
-	GetProvenance() provenance.Provenance
+	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerifed bool) error
+	GetProvenanceManager() provenance.ProvenanceManager
+	UploadTLogEnabled() bool // TODO: TLog should be an independent storageBackend instead of common configuration
+	GetDestinationString() string
 	Type() string
 }
 
-func InitializeStorageBackends(appData application.ApplicationData, manifestStorageType string) (map[string]StorageBackend, error) {
+type StorageConfig struct {
+	// common settings
+	ManifestStorageType string
+	AppData             application.ApplicationData
 
-	configuredStorageBackends := []string{annotation.StorageBackendAnnotation}
+	// resource storage
+	AppProvClientset     appprovClientset.Interface
+	InterlaceNS          string
+	MaxResultsInResource int
 
+	// remote storage
+	APIURL      string
+	APIUsername string
+	APIPassword string
+
+	UploadTLog bool
+}
+
+func InitializeStorageBackends(c StorageConfig) (map[string]StorageBackend, error) {
 	storageBackends := map[string]StorageBackend{}
 	for _, backendType := range configuredStorageBackends {
-		if manifestStorageType == backendType {
+		if c.ManifestStorageType == backendType {
 			switch backendType {
-
 			case annotation.StorageBackendAnnotation:
-
-				annotationStorageBackend, err := annotation.NewStorageBackend(appData)
+				annotationStorageBackend, err := annotation.NewStorageBackend(c.AppData, c.UploadTLog)
 				if err != nil {
 					return nil, err
 				}
 				storageBackends[backendType] = annotationStorageBackend
-
+			case resource.StorageBackendResource:
+				annotationStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog)
+				if err != nil {
+					return nil, err
+				}
+				storageBackends[backendType] = annotationStorageBackend
 			}
 		}
 	}

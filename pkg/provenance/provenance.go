@@ -25,14 +25,17 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/in-toto/in-toto-golang/in_toto"
 )
 
 const maxTrialGetAttestation = 3
 
-type Provenance interface {
-	GenerateProvanance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
+type ProvenanceManager interface {
+	GenerateProvenance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
 	VerifySourceMaterial() (bool, error)
-	GetReference() *ProvenanceRef
+	GetProvenance() in_toto.Statement
+	GetProvSignature() []byte
 }
 
 type ProvenanceRef struct {
@@ -40,7 +43,7 @@ type ProvenanceRef struct {
 	URL  string
 }
 
-func (pr *ProvenanceRef) GetAttestation() ([]byte, error) {
+func (pr ProvenanceRef) GetAttestation() ([]byte, error) {
 	var b64Attestation []byte
 	var err error
 	for i := 0; i < maxTrialGetAttestation; i++ {
@@ -55,7 +58,7 @@ func (pr *ProvenanceRef) GetAttestation() ([]byte, error) {
 	return b64Attestation, nil
 }
 
-func getAttestation(pr *ProvenanceRef) ([]byte, error) {
+func getAttestation(pr ProvenanceRef) ([]byte, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	resp, err := http.Get(pr.URL)
 	if err != nil {

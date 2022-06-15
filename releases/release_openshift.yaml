@@ -162,13 +162,13 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: ARGOCD_NAMESPACE
-          value: argocd
+          value: openshift-gitops
         - name: ARGOCD_SERVER_SERVICE_NAME
-          value: argocd-server
+          value: openshift-gitops-server
         - name: ARGOCD_USER_SECRET_NAME
-          value: argocd-initial-admin-secret
+          value: openshift-gitops-cluster
         - name: ARGOCD_USER_SECRET_PASSFIELD
-          value: password
+          value: admin.password
         image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.1.0-22-g606f3e9-dirty
         imagePullPolicy: Always
         name: argocd-interlace-controller

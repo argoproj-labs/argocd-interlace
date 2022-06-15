@@ -78,7 +78,7 @@ func loginArgoCDAPI() error {
 
 	argocdUser := interlaceConfig.ArgocdAPIUser
 	argocdPass := interlaceConfig.ArgocdAPIPass
-	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdApiBaseUrl, "https://")
+	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdAPIBaseUrl, "https://")
 
 	_, err = utils.CmdExec(argocdCmd, "", "login", argoserver, "--insecure", "--username", argocdUser, "--password", argocdPass)
 	if err != nil {
@@ -92,7 +92,7 @@ func loginArgoCDAPI() error {
 func patchResource(kind, resourceName, namespace, appName string, patchBytes []byte) bool {
 	interlaceConfig, _ := config.GetInterlaceConfig()
 
-	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdApiBaseUrl, "https://")
+	argoserver := strings.TrimPrefix(interlaceConfig.ArgocdAPIBaseUrl, "https://")
 	_, err := utils.CmdExec(argocdCmd, "", "app", "patch-resource", appName, "--server", argoserver,
 		"--kind", kind,
 		"--namespace", namespace,
@@ -156,10 +156,10 @@ func RetriveDesiredManifest(appName string) ([]string, error) {
 		log.Errorf("Error in loading config: %s", err.Error())
 	}
 
-	baseUrl := interlaceConfig.ArgocdApiBaseUrl
+	baseUrl := interlaceConfig.ArgocdAPIBaseUrl
 	manifestsAPIURL := fmt.Sprintf("%s/api/v1/applications/%s/manifests", baseUrl, appName)
 
-	token, err := GetArgoCDUserToken(interlaceConfig.ArgocdApiBaseUrl, interlaceConfig.ArgocdAPIUser, interlaceConfig.ArgocdAPIPass)
+	token, err := GetArgoCDUserToken(interlaceConfig.ArgocdAPIBaseUrl, interlaceConfig.ArgocdAPIUser, interlaceConfig.ArgocdAPIPass)
 	if err != nil {
 		return nil, errors.Wrap(err, "error when getting argocd user token")
 	}

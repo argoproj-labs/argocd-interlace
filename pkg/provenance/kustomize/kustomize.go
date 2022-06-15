@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	"github.com/pkg/errors"
 	kustbuildutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/manifestbuild/kustomize"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -45,22 +47,24 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-type Provenance struct {
+type KustomizeProvenanceManager struct {
 	appData application.ApplicationData
-	ref     *provenance.ProvenanceRef
+	prov    in_toto.Statement
+	sig     []byte
+	ref     provenance.ProvenanceRef
 }
 
 const (
 	ProvenanceAnnotation = "kustomize"
 )
 
-func NewProvenance(appData application.ApplicationData) (*Provenance, error) {
-	return &Provenance{
+func NewProvenanceManager(appData application.ApplicationData) (*KustomizeProvenanceManager, error) {
+	return &KustomizeProvenanceManager{
 		appData: appData,
 	}, nil
 }
 
-func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *KustomizeProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
@@ -137,6 +141,7 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 			Invocation: invocation,
 		},
 	}
+	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
@@ -149,19 +154,22 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 		return err
 	}
 
-	provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
 	}
+	if provSig != nil {
+		p.sig = provSig
+	}
 	if provRef != nil {
-		p.ref = provRef
+		p.ref = *provRef
 	}
 
 	return nil
 }
 
-func (p *Provenance) VerifySourceMaterial() (bool, error) {
+func (p *KustomizeProvenanceManager) VerifySourceMaterial() (bool, error) {
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 
@@ -189,7 +197,16 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	keyPath := config.KEYRING_PUB_KEY_PATH
+	keyPath := config.SourceMaterialVerifyKeyPath
+	pubkeyBytes, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to read public key file")
+	}
+	// if verification key is empty, skip source material verification
+	if string(pubkeyBytes) == "" {
+		log.Warnf("verification key is empty, so skip source material verification")
+		return false, nil
+	}
 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
@@ -218,13 +235,17 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 	return flag, nil
 }
 
-func (p *Provenance) GetReference() *provenance.ProvenanceRef {
-	return p.ref
+func (p *KustomizeProvenanceManager) GetProvenance() in_toto.Statement {
+	return p.prov
+}
+
+func (p *KustomizeProvenanceManager) GetProvSignature() []byte {
+	return p.sig
 }
 
 func verifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, []byte, error) {
 
-	if keyRing, err := LoadKeyRing(keyPath); err != nil {
+	if keyRing, err := LoadPublicKey(keyPath); err != nil {
 		return false, "Error when loading key ring", nil, nil, err
 	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig, nil); signer == nil {
 		if err != nil {
@@ -273,27 +294,35 @@ func NewSignerFromUserId(uid *packet.UserId) *Signer {
 	}
 }
 
-func LoadKeyRing(keyPath string) (openpgp.EntityList, error) {
+func LoadPublicKey(keyPath string) (openpgp.EntityList, error) {
+	var keyRingReader io.Reader
+	var err error
+
+	keyRingReader, err = os.Open(filepath.Clean(keyPath))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read public key stream")
+	}
+
 	entities := []*openpgp.Entity{}
-	var retErr error
-	kpath := filepath.Clean(keyPath)
-	if keyRingReader, err := os.Open(kpath); err != nil {
-		log.Warn("Failed to open keyring")
-		retErr = err
-	} else {
-		tmpList, err := openpgp.ReadKeyRing(keyRingReader)
-		if err != nil {
-			log.Warn("Failed to read keyring")
-			retErr = err
-		}
+	var tmpList openpgp.EntityList
+	var err1, err2 error
+	// try loading it as a non-armored public key
+	tmpList, err1 = openpgp.ReadKeyRing(keyRingReader)
+	if err1 != nil {
+		// keyRingReader is a stream, so it must be re-loaded after first trial
+		keyRingReader, _ = os.Open(filepath.Clean(keyPath))
+		// try loading it as an armored public key
+		tmpList, err2 = openpgp.ReadArmoredKeyRing(keyRingReader)
+	}
+	// if both trial failed, return error
+	if err1 != nil && err2 != nil {
+		err = fmt.Errorf("failed to load public key; %s; %s", err1.Error(), err2.Error())
+	} else if len(tmpList) > 0 {
 		for _, tmp := range tmpList {
-			for _, id := range tmp.Identities {
-				log.Info("identity name ", id.Name, " id.UserId.Name: ", id.UserId.Name, " id.UserId.Email:", id.UserId.Email)
-			}
 			entities = append(entities, tmp)
 		}
 	}
-	return openpgp.EntityList(entities), retErr
+	return openpgp.EntityList(entities), err
 }
 
 func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {

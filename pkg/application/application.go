@@ -18,6 +18,7 @@ package application
 
 type ApplicationData struct {
 	AppName                     string
+	AppNamespace                string
 	AppPath                     string
 	AppDirPath                  string
 	AppClusterUrl               string
@@ -34,12 +35,13 @@ type ApplicationData struct {
 	Version                     string
 }
 
-func NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
+func NewApplicationData(appName, appNS, appPath, appDirPath, appClusterUrl,
 	appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha, appDestNS,
 	chart string, isHelm bool, valueFiles []string, releaseName string,
 	values string, version string) (*ApplicationData, error) {
 	return &ApplicationData{
 		AppName:                     appName,
+		AppNamespace:                appNS,
 		AppPath:                     appPath,
 		AppDirPath:                  appDirPath,
 		AppClusterUrl:               appClusterUrl,

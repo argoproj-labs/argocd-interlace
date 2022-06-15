@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-interlace-controller
+  namespace: argocd-interlace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argocd-interlace-controller
+  template:
+    metadata:
+      labels:
+        app: argocd-interlace-controller
+    spec:
+      serviceAccountName: argocd-interlace-controller
+      containers:
+        - name: argocd-interlace-controller
+          image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.1.0-22-g606f3e9-dirty
+          imagePullPolicy: Always
+          command:
+            - argocd-interlace
+          env:
+            - name: MANIFEST_STORAGE_TYPE
+              value: resource
+            - name: REKOR_SERVER
+              value: https://rekor.sigstore.dev
+            - name: SOURCE_MATERIAL_SIGNATURE
+              value: "source-materials.sig"
+            - name: SOURCE_MATERIAL_HASH_LIST
+              value: "source-materials"
+            - name: ALWAYS_GENERATE_PROV
+              value: "true"
+            - name: COSIGN_PASSWORD
+              value: ""
+            - name: MANIFEST_ARGOCD_PROJECT
+              value: default
+            - name: HELM_PLUGINS
+              value: /root/.local/share/helm/plugins
+            - name: SIGNATURE_RSC_LABEL
+              # value: "integrityshield.io/signatureResource" # in integrity shield case
+              value: "signatureResource"
+            - name: MAX_RESULTS_IN_RESOURCE
+              value: "10"
+            - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
+              value: info
+            - name: ARGOCD_INTERLACE_LOG_LEVEL
+              value: info
+            - name: "ARGOCD_INTERLACE_NAMESPACE"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: sign-key
+              mountPath: /etc/signkey
+            - name: verify-key
+              mountPath: /etc/verifykey
+      volumes:
+        - name: sign-key
+          secret:
+            secretName: interlace-signing-key
+        - name: verify-key
+          secret:
+            secretName: source-material-verify-key

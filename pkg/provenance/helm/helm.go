@@ -32,22 +32,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type Provenance struct {
+type HelmProvenanceManager struct {
 	appData application.ApplicationData
-	ref     *provenance.ProvenanceRef
+	prov    in_toto.Statement
+	sig     []byte
+	ref     provenance.ProvenanceRef
 }
 
 const (
 	ProvenanceAnnotation = "helm"
 )
 
-func NewProvenance(appData application.ApplicationData) (*Provenance, error) {
-	return &Provenance{
+func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceManager, error) {
+	return &HelmProvenanceManager{
 		appData: appData,
 	}, nil
 }
 
-func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appSourceRevision := p.appData.AppSourceRevision
 	appDirPath := p.appData.AppDirPath
@@ -88,6 +90,7 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 			Invocation: invocation,
 		},
 	}
+	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
@@ -100,19 +103,22 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 		return err
 	}
 
-	provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
 	}
+	if provSig != nil {
+		p.sig = provSig
+	}
 	if provRef != nil {
-		p.ref = provRef
+		p.ref = *provRef
 	}
 
 	return nil
 }
 
-func (p *Provenance) generateMaterial() []intotoprov02.ProvenanceMaterial {
+func (p *HelmProvenanceManager) generateMaterial() []intotoprov02.ProvenanceMaterial {
 
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
@@ -143,7 +149,7 @@ func (p *Provenance) generateMaterial() []intotoprov02.ProvenanceMaterial {
 	return materials
 }
 
-func (p *Provenance) VerifySourceMaterial() (bool, error) {
+func (p *HelmProvenanceManager) VerifySourceMaterial() (bool, error) {
 
 	appPath := p.appData.AppPath
 	repoUrl := p.appData.AppSourceRepoUrl
@@ -188,6 +194,10 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 }
 
-func (p *Provenance) GetReference() *provenance.ProvenanceRef {
-	return p.ref
+func (p *HelmProvenanceManager) GetProvenance() in_toto.Statement {
+	return p.prov
+}
+
+func (p *HelmProvenanceManager) GetProvSignature() []byte {
+	return p.sig
 }

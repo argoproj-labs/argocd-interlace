@@ -19,6 +19,8 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
@@ -103,6 +105,11 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	}
 
 	return false, nil
+}
+
+func GetManifest(appData application.ApplicationData) ([]byte, error) {
+	fpath := filepath.Join(appData.AppDirPath, config.MANIFEST_FILE_NAME)
+	return ioutil.ReadFile(fpath)
 }
 
 func checkDiff(targetObjYAMLBytes []byte, manifestYAMLs [][]byte) (bool, error) {

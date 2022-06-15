@@ -26,7 +26,7 @@ image:
 	@echo building image
 	docker build -t $(IMG_NAME):$(IMG_VERSION) .
 	docker push $(IMG_NAME):$(IMG_VERSION)
-	yq w -i  deploy/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(IMG_VERSION)
+	yq w -i  common/deployment.yaml 'spec.template.spec.containers.(name==argocd-interlace-controller).image' $(IMG_NAME):$(IMG_VERSION)
 
 build: bin image
 

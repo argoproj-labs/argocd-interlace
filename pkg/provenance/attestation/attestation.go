@@ -57,18 +57,23 @@ var (
 	Read = readPasswordFn
 )
 
-func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) (*provenance.ProvenanceRef, error) {
+func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) ([]byte, *provenance.ProvenanceRef, error) {
 
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(config.PRIVATE_KEY_PATH))
+	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(config.OutputSignKeyPath))
 	if err != nil {
 		log.Errorf("Error in reading private key:  %s", err.Error())
-		return nil, err
+		return nil, nil, err
+	}
+	// if signing key is empty, do not sign the provenance and return here
+	if string(ecdsaPriv) == "" {
+		log.Warnf("signing key is empty, so skip signing the provenance")
+		return nil, nil, nil
 	}
 
 	pb, _ := pem.Decode(ecdsaPriv)
@@ -79,13 +84,13 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 
 	if err != nil {
 		log.Errorf("Error in dycrypting private key: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 	priv, err := x509.ParsePKCS8PrivateKey(x509Encoded)
 
 	if err != nil {
 		log.Errorf("Error in parsing private key: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	intotoSigner := &IntotoSigner{
@@ -94,26 +99,31 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	signer, err := dsse.NewEnvelopeSigner(intotoSigner)
 	if err != nil {
 		log.Errorf("Error in creating new signer: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	env, err := signer.SignPayload("application/vnd.in-toto+json", b)
 	if err != nil {
 		log.Errorf("Error in signing payload: %s", err.Error())
-		return nil, err
+		return nil, nil, err
+	}
+
+	var provSig []byte
+	if len(env.Signatures) > 0 {
+		provSig = []byte(env.Signatures[0].Sig)
 	}
 
 	// Now verify
 	_, err = signer.Verify(env)
 	if err != nil {
 		log.Errorf("Error in verifying env: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	eb, err := json.Marshal(env)
 	if err != nil {
 		log.Errorf("Error in marshaling env: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Debug("attestation.json", string(eb))
@@ -121,7 +131,7 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	err = utils.WriteToFile(string(eb), appDirPath, config.ATTESTATION_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing attestation to a file: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	attestationPath := filepath.Join(appDirPath, config.ATTESTATION_FILE_NAME)
@@ -133,13 +143,13 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		pubkeyPath, err := savePubkeyAsTemporaryFile(pub)
 		if err != nil {
 			log.Errorf("Error in saving public key: %s", err.Error())
-			return nil, err
+			return nil, nil, err
 		}
 		defer os.Remove(pubkeyPath)
 		provRef = upload(it, attestationPath, appName, pubkeyPath)
 	}
 
-	return provRef, nil
+	return provSig, provRef, nil
 
 }
 

@@ -1,30 +1,19 @@
-//
-// Copyright 2021 IBM Corporation
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-
-package annotation
+package resource
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"time"
 
+	appprov "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
+	"github.com/argoproj-labs/argocd-interlace/pkg/manifest"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	helmprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/helm"
 	kustprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/kustomize"
@@ -35,32 +24,40 @@ import (
 	"github.com/pkg/errors"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
-	StorageBackendAnnotation = "annotation"
+	StorageBackendResource = "resource"
 )
 
-type AnnotationStorageBackend struct {
+type ResourceStorageBackend struct {
 	appData application.ApplicationData
 	provMgr provenance.ProvenanceManager
 
-	uploadTLog bool
+	appProvClientset appprovClientset.Interface
+	interlaceNS      string
+	maxResults       int
+	uploadTLog       bool
 }
 
-func NewStorageBackend(appData application.ApplicationData, uploadTLog bool) (*AnnotationStorageBackend, error) {
-	return &AnnotationStorageBackend{
-		appData:    appData,
-		uploadTLog: uploadTLog,
+func NewStorageBackend(appData application.ApplicationData, appProvClientset appprovClientset.Interface, interlaceNS string, maxResults int, uploadTLog bool) (*ResourceStorageBackend, error) {
+	return &ResourceStorageBackend{
+		appData:          appData,
+		appProvClientset: appProvClientset,
+		interlaceNS:      interlaceNS,
+		maxResults:       maxResults,
+		uploadTLog:       uploadTLog,
 	}, nil
 }
 
-func (s *AnnotationStorageBackend) GetLatestManifestContent() ([]byte, error) {
+func (s *ResourceStorageBackend) GetLatestManifestContent() ([]byte, error) {
 	return nil, nil
 }
 
-func (s *AnnotationStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
+func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 	keyPath := config.OutputSignKeyPath
 	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
@@ -195,7 +192,7 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 	return json.Marshal(patchData)
 }
 
-func (s *AnnotationStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool) error {
+func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool) error {
 	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
 	if err != nil {
@@ -205,38 +202,121 @@ func (s *AnnotationStorageBackend) StoreManifestProvenance(buildStartedOn time.T
 	var provMgr provenance.ProvenanceManager
 	if s.appData.IsHelm {
 		provMgr, _ = helmprov.NewProvenanceManager(s.appData)
-		err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
-
-		if err != nil {
-			log.Errorf("Error in storing provenance: %s", err.Error())
-			return err
-		}
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
-		err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
-
-		if err != nil {
-			log.Errorf("Error in storing provenance: %s", err.Error())
-			return err
-		}
+	}
+	err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	if err != nil {
+		log.Errorf("Error in generating provenance: %s", err.Error())
+		return err
 	}
 	s.provMgr = provMgr
+
+	appName := s.appData.AppName
+	appNamespace := s.appData.AppNamespace
+	appProvName := s.appData.AppName
+
+	prov := provMgr.GetProvenance()
+	provBytes, err := json.Marshal(prov)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal provenance data to be stored in ApplicationProvenance")
+	}
+
+	provSig := provMgr.GetProvSignature()
+
+	manifestBytes, err := manifest.GetManifest(s.appData)
+	if err != nil {
+		return errors.Wrap(err, "failed to get the generated manifest to be stored in ApplicationProvenance")
+	}
+
+	appProvExists := false
+	current, err := s.appProvClientset.InterlaceV1beta1().ApplicationProvenances(s.interlaceNS).Get(context.TODO(), appProvName, metav1.GetOptions{})
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, fmt.Sprintf("failed to get %s", appProvName))
+		}
+	} else {
+		appProvExists = true
+	}
+
+	var newone *appprov.ApplicationProvenance
+	doneMsg := "created"
+	now := metav1.NewTime(time.Now().UTC())
+	if appProvExists {
+		newone = current
+		newResults := current.Status.Results
+		if newResults == nil {
+			newResults = []appprov.ResultPerSync{}
+		}
+		newResult := appprov.ResultPerSync{
+			Time:           now,
+			SourceVerified: sourceVerified,
+			Manifest:       manifestBytes,
+			Provenance:     provBytes,
+			Signature:      provSig,
+		}
+		newResults = append(newResults, newResult)
+		startIndex := 0
+		// if the number of the results exceeds the max, keep the newer ones
+		if len(newResults) > s.maxResults {
+			startIndex = len(newResults) - s.maxResults
+		}
+		newone.Status = appprov.ApplicationProvenanceStatus{
+			LastUpdated: now,
+			Results:     newResults[startIndex:],
+		}
+		_, err = s.appProvClientset.InterlaceV1beta1().ApplicationProvenances(s.interlaceNS).Update(context.TODO(), newone, metav1.UpdateOptions{})
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to update ApplicationProvenance `%s`", appProvName))
+		}
+		doneMsg = "updated"
+	} else {
+		newone = &appprov.ApplicationProvenance{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: s.interlaceNS,
+				Name:      appProvName,
+			},
+			Spec: appprov.ApplicationProvenanceSpec{
+				Application: appprov.ApplicationRef{
+					Namespace: appNamespace,
+					Name:      appName,
+				},
+			},
+			Status: appprov.ApplicationProvenanceStatus{
+				LastUpdated: now,
+				Results: []appprov.ResultPerSync{
+					{
+						Time:           now,
+						SourceVerified: sourceVerified,
+						Manifest:       manifestBytes,
+						Provenance:     provBytes,
+						Signature:      provSig,
+					},
+				},
+			},
+		}
+		_, err = s.appProvClientset.InterlaceV1beta1().ApplicationProvenances(s.interlaceNS).Create(context.TODO(), newone, metav1.CreateOptions{})
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("failed to create ApplicationProvenance `%s`", appProvName))
+		}
+	}
+	log.Infof("ApplicationProvenance `%s` is %s", appProvName, doneMsg)
 
 	return nil
 }
 
-func (b *AnnotationStorageBackend) UploadTLogEnabled() bool {
+func (b *ResourceStorageBackend) UploadTLogEnabled() bool {
 	return b.uploadTLog
 }
 
-func (b *AnnotationStorageBackend) GetDestinationString() string {
-	return "annotation"
+func (b *ResourceStorageBackend) GetDestinationString() string {
+	return fmt.Sprintf("ApplicationProvenance `%s`", b.appData.AppName)
 }
 
-func (b *AnnotationStorageBackend) GetProvenanceManager() provenance.ProvenanceManager {
+func (b *ResourceStorageBackend) GetProvenanceManager() provenance.ProvenanceManager {
 	return b.provMgr
 }
 
-func (b *AnnotationStorageBackend) Type() string {
-	return StorageBackendAnnotation
+func (b *ResourceStorageBackend) Type() string {
+	return StorageBackendResource
 }
