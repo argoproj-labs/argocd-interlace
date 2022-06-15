@@ -29,7 +29,6 @@ import (
 var kubeconfig string
 var namespace string
 var debug bool
-var maxAttempt = 30
 
 var rootCmd = &cobra.Command{
 	Use:   "argocd-interlace",
