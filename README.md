@@ -73,10 +73,10 @@ $ kubectl get appprov -n argocd-interlace sample-app -o json
         "lastUpdated": "2022-06-15T07:04:05Z",
         "results": [
             {
-                "manifest": "ICBh  ...  ODAK",
-                "provenance": "eyJf  ...  fQ==",
-                "sourceVerified": false,
-                "time": "2022-06-15T07:04:05Z"
+                "manifest": "ICBh  ...  ODAK",      // base64 encoded resource manifest
+                "provenance": "eyJf  ...  fQ==",    // base64 encoded provenance data
+                "sourceVerified": false,            // whether source material was verified or not
+                "time": "2022-06-15T07:04:05Z"      // timestamp of the update
             }
         ]
     }
