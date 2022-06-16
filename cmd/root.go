@@ -37,7 +37,6 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		kubeconfig, _ := cmd.Flags().GetString("kubeconfig")
-		namespace, _ := cmd.Flags().GetString("namespace")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -48,7 +47,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		go controller.Start(ctx, kubeconfig, namespace, interlaceConfig)
+		go controller.Start(ctx, kubeconfig, interlaceConfig)
 
 		// Wait forever
 		select {}

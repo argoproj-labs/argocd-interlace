@@ -24,7 +24,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -32,12 +31,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
-	"github.com/sigstore/cosign/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 	"github.com/theupdateframework/go-tuf/encrypted"
 	"golang.org/x/term"
@@ -48,30 +48,32 @@ type IntotoSigner struct {
 }
 
 const (
-	cli = "/usr/local/bin/rekor-cli"
+	cli              = "/usr/local/bin/rekor-cli"
+	publicKeyPEMType = "PUBLIC KEY"
 )
-
-type SignOpts struct {
-	Pf cosign.PassFunc
-}
 
 var (
 	// Read is for fuzzing
 	Read = readPasswordFn
 )
 
-func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) (*provenance.ProvenanceRef, error) {
+func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) ([]byte, *provenance.ProvenanceRef, error) {
 
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(utils.PRIVATE_KEY_PATH))
+	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(config.OutputSignKeyPath))
 	if err != nil {
 		log.Errorf("Error in reading private key:  %s", err.Error())
-		return nil, err
+		return nil, nil, err
+	}
+	// if signing key is empty, do not sign the provenance and return here
+	if string(ecdsaPriv) == "" {
+		log.Warnf("signing key is empty, so skip signing the provenance")
+		return nil, nil, nil
 	}
 
 	pb, _ := pem.Decode(ecdsaPriv)
@@ -82,58 +84,72 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 
 	if err != nil {
 		log.Errorf("Error in dycrypting private key: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 	priv, err := x509.ParsePKCS8PrivateKey(x509Encoded)
 
 	if err != nil {
 		log.Errorf("Error in parsing private key: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
-	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
+	intotoSigner := &IntotoSigner{
 		priv: priv.(*ecdsa.PrivateKey),
-	})
+	}
+	signer, err := dsse.NewEnvelopeSigner(intotoSigner)
 	if err != nil {
 		log.Errorf("Error in creating new signer: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	env, err := signer.SignPayload("application/vnd.in-toto+json", b)
 	if err != nil {
 		log.Errorf("Error in signing payload: %s", err.Error())
-		return nil, err
+		return nil, nil, err
+	}
+
+	var provSig []byte
+	if len(env.Signatures) > 0 {
+		provSig = []byte(env.Signatures[0].Sig)
 	}
 
 	// Now verify
-	err = signer.Verify(env)
+	_, err = signer.Verify(env)
 	if err != nil {
 		log.Errorf("Error in verifying env: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	eb, err := json.Marshal(env)
 	if err != nil {
 		log.Errorf("Error in marshaling env: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Debug("attestation.json", string(eb))
 
-	err = utils.WriteToFile(string(eb), appDirPath, utils.ATTESTATION_FILE_NAME)
+	err = utils.WriteToFile(string(eb), appDirPath, config.ATTESTATION_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing attestation to a file: %s", err.Error())
-		return nil, err
+		return nil, nil, err
 	}
 
-	attestationPath := filepath.Join(appDirPath, utils.ATTESTATION_FILE_NAME)
+	attestationPath := filepath.Join(appDirPath, config.ATTESTATION_FILE_NAME)
 
 	var provRef *provenance.ProvenanceRef
 	if uploadTLog {
-		provRef = upload(it, attestationPath, appName)
+		// public key file is required to upload the attestation
+		pub := intotoSigner.Public()
+		pubkeyPath, err := savePubkeyAsTemporaryFile(pub)
+		if err != nil {
+			log.Errorf("Error in saving public key: %s", err.Error())
+			return nil, nil, err
+		}
+		defer os.Remove(pubkeyPath)
+		provRef = upload(it, attestationPath, appName, pubkeyPath)
 	}
 
-	return provRef, nil
+	return provSig, provRef, nil
 
 }
 
@@ -180,16 +196,16 @@ func GetPass(confirm bool) ([]byte, error) {
 	return pw1, nil
 }
 
-func (it *IntotoSigner) Sign(data []byte) ([]byte, string, error) {
+func (it *IntotoSigner) Sign(data []byte) ([]byte, error) {
 	h := sha256.Sum256(data)
 	sig, err := it.priv.Sign(rand.Reader, h[:], crypto.SHA256)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return sig, "", nil
+	return sig, nil
 }
 
-func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
+func (it *IntotoSigner) Verify(data, sig []byte) error {
 	h := sha256.Sum256(data)
 	ok := ecdsa.VerifyASN1(&it.priv.PublicKey, h[:], sig)
 	if ok {
@@ -198,11 +214,17 @@ func (it *IntotoSigner) Verify(_ string, data, sig []byte) error {
 	return errors.New("invalid signature")
 }
 
-func upload(it in_toto.Statement, attestationPath, appName string) *provenance.ProvenanceRef {
+func (it *IntotoSigner) KeyID() (string, error) {
+	return "no-keyid", nil
+}
 
-	pubKeyPath := utils.PUB_KEY_PATH
+func (it *IntotoSigner) Public() crypto.PublicKey {
+	return it.priv.Public()
+}
+
+func upload(it in_toto.Statement, attestationPath, appName, pubkeyPath string) *provenance.ProvenanceRef {
 	// If we do it twice, it should already exist
-	out := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubKeyPath, "--pki-format", "x509")
+	out := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubkeyPath, "--pki-format", "x509")
 
 	outputContains(out, "Created entry at")
 
@@ -279,4 +301,28 @@ func run(stdin, cmd string, arg ...string) string {
 		log.Errorf("Error in executing CLI: %s", string(b))
 	}
 	return string(b)
+}
+
+func savePubkeyAsTemporaryFile(pubkey crypto.PublicKey) (string, error) {
+	f, err := ioutil.TempFile("", "publickey")
+	if err != nil {
+		return "", err
+	}
+	pubkeyPEM, err := x509.MarshalPKIXPublicKey(pubkey)
+	if err != nil {
+		return "", err
+	}
+	pemBlock := &pem.Block{
+		Type:  publicKeyPEMType,
+		Bytes: pubkeyPEM,
+	}
+	err = pem.Encode(f, pemBlock)
+	if err != nil {
+		return "", err
+	}
+	pubkeyPath, err := filepath.Abs(f.Name())
+	if err != nil {
+		return "", err
+	}
+	return pubkeyPath, nil
 }

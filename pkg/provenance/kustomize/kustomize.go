@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -32,38 +33,48 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
+	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	"github.com/pkg/errors"
 	kustbuildutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/manifestbuild/kustomize"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/packet"
+
+	// package golang.org/x/crypto/openpgp is deprecated: this package is unmaintained except for security fixes.
+	// New applications should consider a more focused, modern alternative to OpenPGP for their specific task.
+	// If you are required to interoperate with OpenPGP systems and need a maintained package, consider a community fork.
+	// See https://golang.org/issue/44226.
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-type Provenance struct {
+type KustomizeProvenanceManager struct {
 	appData application.ApplicationData
-	ref     *provenance.ProvenanceRef
+	prov    in_toto.Statement
+	sig     []byte
+	ref     provenance.ProvenanceRef
 }
 
 const (
 	ProvenanceAnnotation = "kustomize"
 )
 
-func NewProvenance(appData application.ApplicationData) (*Provenance, error) {
-	return &Provenance{
+func NewProvenanceManager(appData application.ApplicationData) (*KustomizeProvenanceManager, error) {
+	return &KustomizeProvenanceManager{
 		appData: appData,
 	}, nil
 }
 
-func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *KustomizeProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 	appSourceRevision := p.appData.AppSourceRevision
 	appSourceCommitSha := p.appData.AppSourceCommitSha
 
-	appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
+	interlaceConfig, _ := config.GetInterlaceConfig()
+	appDirPath := filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 
-	manifestFile := filepath.Join(appDirPath, utils.MANIFEST_FILE_NAME)
+	manifestFile := filepath.Join(appDirPath, config.MANIFEST_FILE_NAME)
 	recipeCmds := []string{"", ""}
 
 	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
@@ -90,12 +101,16 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	}
 
 	provBytes, err := json.Marshal(prov)
+	if err != nil {
+		log.Errorf("error when marshaling provenance:  %s", err.Error())
+		return err
+	}
 
 	subjects := []in_toto.Subject{}
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
 	subjects = append(subjects, in_toto.Subject{Name: target,
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256": targetDigest,
 		},
 	})
@@ -103,58 +118,66 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	materials := generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision,
 		appSourceCommitSha, string(provBytes))
 
-	entryPoint := "kustomize build"
-	recipe := in_toto.ProvenanceRecipe{
-		EntryPoint: entryPoint,
-		Arguments:  []string{appPath},
+	entryPoint := "kustomize"
+	invocation := intotoprov02.ProvenanceInvocation{
+		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
+		Parameters:   []string{"build", baseDir},
 	}
 
 	it := in_toto.Statement{
 		StatementHeader: in_toto.StatementHeader{
 			Type:          in_toto.StatementInTotoV01,
-			PredicateType: in_toto.PredicateSLSAProvenanceV01,
+			PredicateType: intotoprov02.PredicateSLSAProvenance,
 			Subject:       subjects,
 		},
-		Predicate: in_toto.ProvenancePredicate{
-			Metadata: &in_toto.ProvenanceMetadata{
+		Predicate: intotoprov02.ProvenancePredicate{
+			Metadata: &intotoprov02.ProvenanceMetadata{
 				Reproducible:    true,
 				BuildStartedOn:  &buildStartedOn,
 				BuildFinishedOn: &buildFinishedOn,
 			},
 
-			Materials: materials,
-			Recipe:    recipe,
+			Materials:  materials,
+			Invocation: invocation,
 		},
 	}
+	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
 		return err
 	}
 
-	err = utils.WriteToFile(string(b), appDirPath, utils.PROVENANCE_FILE_NAME)
+	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
 		return err
 	}
 
-	provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
 	}
+	if provSig != nil {
+		p.sig = provSig
+	}
 	if provRef != nil {
-		p.ref = provRef
+		p.ref = *provRef
 	}
 
 	return nil
 }
 
-func (p *Provenance) VerifySourceMaterial() (bool, error) {
+func (p *KustomizeProvenanceManager) VerifySourceMaterial() (bool, error) {
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 
 	interlaceConfig, err := config.GetInterlaceConfig()
+	if err != nil {
+		log.Errorf("error when getting interlace config:  %s", err.Error())
+		return false, err
+	}
 
 	host, orgRepo, path, gitRef, gitSuff := ParseGitUrl(appSourceRepoUrl)
 
@@ -174,13 +197,30 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	baseDir := filepath.Join(r.RootDir, appPath)
 
-	keyPath := utils.KEYRING_PUB_KEY_PATH
+	keyPath := config.SourceMaterialVerifyKeyPath
+	pubkeyBytes, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to read public key file")
+	}
+	// if verification key is empty, skip source material verification
+	if string(pubkeyBytes) == "" {
+		log.Warnf("verification key is empty, so skip source material verification")
+		return false, nil
+	}
 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
 
 	verification_target, err := os.Open(srcMatPath)
+	if err != nil {
+		log.Errorf("error when opening source material digest file:  %s", err.Error())
+		return false, err
+	}
 	signature, err := os.Open(srcMatSigPath)
+	if err != nil {
+		log.Errorf("error when opening source material signature file:  %s", err.Error())
+		return false, err
+	}
 	flag, _, _, _, _ := verifySignature(keyPath, verification_target, signature)
 
 	hashCompareSuccess := false
@@ -195,15 +235,19 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 	return flag, nil
 }
 
-func (p *Provenance) GetReference() *provenance.ProvenanceRef {
-	return p.ref
+func (p *KustomizeProvenanceManager) GetProvenance() in_toto.Statement {
+	return p.prov
+}
+
+func (p *KustomizeProvenanceManager) GetProvSignature() []byte {
+	return p.sig
 }
 
 func verifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, []byte, error) {
 
-	if keyRing, err := LoadKeyRing(keyPath); err != nil {
+	if keyRing, err := LoadPublicKey(keyPath); err != nil {
 		return false, "Error when loading key ring", nil, nil, err
-	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig); signer == nil {
+	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig, nil); signer == nil {
 		if err != nil {
 			log.Error("Signature verification error:", err.Error())
 		}
@@ -250,27 +294,35 @@ func NewSignerFromUserId(uid *packet.UserId) *Signer {
 	}
 }
 
-func LoadKeyRing(keyPath string) (openpgp.EntityList, error) {
+func LoadPublicKey(keyPath string) (openpgp.EntityList, error) {
+	var keyRingReader io.Reader
+	var err error
+
+	keyRingReader, err = os.Open(filepath.Clean(keyPath))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read public key stream")
+	}
+
 	entities := []*openpgp.Entity{}
-	var retErr error
-	kpath := filepath.Clean(keyPath)
-	if keyRingReader, err := os.Open(kpath); err != nil {
-		log.Warn("Failed to open keyring")
-		retErr = err
-	} else {
-		tmpList, err := openpgp.ReadKeyRing(keyRingReader)
-		if err != nil {
-			log.Warn("Failed to read keyring")
-			retErr = err
-		}
+	var tmpList openpgp.EntityList
+	var err1, err2 error
+	// try loading it as a non-armored public key
+	tmpList, err1 = openpgp.ReadKeyRing(keyRingReader)
+	if err1 != nil {
+		// keyRingReader is a stream, so it must be re-loaded after first trial
+		keyRingReader, _ = os.Open(filepath.Clean(keyPath))
+		// try loading it as an armored public key
+		tmpList, err2 = openpgp.ReadArmoredKeyRing(keyRingReader)
+	}
+	// if both trial failed, return error
+	if err1 != nil && err2 != nil {
+		err = fmt.Errorf("failed to load public key; %s; %s", err1.Error(), err2.Error())
+	} else if len(tmpList) > 0 {
 		for _, tmp := range tmpList {
-			for _, id := range tmp.Identities {
-				log.Info("identity name ", id.Name, " id.UserId.Name: ", id.UserId.Name, " id.UserId.Email:", id.UserId.Email)
-			}
 			entities = append(entities, tmp)
 		}
 	}
-	return openpgp.EntityList(entities), retErr
+	return openpgp.EntityList(entities), err
 }
 
 func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
@@ -308,13 +360,13 @@ func compareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 	return true, nil
 }
 
-func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string, provTrace string) []in_toto.ProvenanceMaterial {
+func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, appSourceCommitSha string, provTrace string) []intotoprov02.ProvenanceMaterial {
 
-	materials := []in_toto.ProvenanceMaterial{}
+	materials := []intotoprov02.ProvenanceMaterial{}
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 		URI: appSourceRepoUrl + ".git",
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"commit":   string(appSourceCommitSha),
 			"revision": appSourceRevision,
 			"path":     appPath,
@@ -332,9 +384,9 @@ func generateMaterial(appName, appPath, appSourceRepoUrl, appSourceRevision, app
 		commit := gjson.Get(mat.String(), "digest.commit").String()
 
 		if uri != appSourceRepoUrlFul {
-			intoMat := in_toto.ProvenanceMaterial{
+			intoMat := intotoprov02.ProvenanceMaterial{
 				URI: uri,
-				Digest: in_toto.DigestSet{
+				Digest: intotoprov02.DigestSet{
 					"commit":   commit,
 					"revision": revision,
 					"path":     path,

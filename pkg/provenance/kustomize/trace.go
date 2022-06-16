@@ -26,6 +26,7 @@ import (
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	k8sutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -49,7 +50,7 @@ func GitLatestCommitSha(repoUrl string, branch string) string {
 	desiredUrl := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s",
 		orgName, repoName, branch)
 
-	response, err := utils.QueryAPI(desiredUrl, "GET", gitToken, nil)
+	response, err := argoutil.QueryAPI(desiredUrl, "GET", gitToken, nil)
 
 	if err != nil {
 		log.Errorf("Error occured while query github %s ", err.Error())
@@ -79,11 +80,13 @@ func getRepoInfo(repoUrl string) (string, string) {
 }
 
 func GetRepoCredentials(repoUrl string) string {
-
 	interlaceConfig, err := config.GetInterlaceConfig()
+	if err != nil {
+		log.Errorf("error when getting interlace config %s", err.Error())
+		return ""
+	}
 
-	_, cfg, err := utils.GetClient("")
-
+	_, cfg, err := utils.GetK8sClient("")
 	if err != nil {
 		log.Errorf("Error occured while reading incluster kubeconfig %s", err.Error())
 		return ""

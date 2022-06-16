@@ -44,8 +44,16 @@ type ApplicationRef struct {
 
 // ApplicationProvenanceStatus is the status for a ApplicationProvenance resource
 type ApplicationProvenanceStatus struct {
-	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
-	Provenance  []byte      `json:"provenance,omitempty"`
+	LastUpdated metav1.Time     `json:"lastUpdated,omitempty"`
+	Results     []ResultPerSync `json:"results,omitempty"`
+}
+
+type ResultPerSync struct {
+	Time           metav1.Time `json:"time,omitempty"`
+	SourceVerified bool        `json:"sourceVerified"`
+	Manifest       []byte      `json:"manifest,omitempty"`
+	Provenance     []byte      `json:"provenance,omitempty"`
+	Signature      []byte      `json:"signature,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

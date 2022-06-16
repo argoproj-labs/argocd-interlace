@@ -19,17 +19,12 @@ package utils
 import (
 	"bytes"
 	"crypto/sha256"
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
@@ -37,23 +32,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const (
-	MANIFEST_FILE_NAME        = "manifest.yaml"
-	MANIFEST_DIR              = "manifest-bundles"
-	SIGNED_MANIFEST_FILE_NAME = "manifest.signed"
-	PROVENANCE_FILE_NAME      = "provenance.yaml"
-	ATTESTATION_FILE_NAME     = "attestation.json"
-	TMP_DIR                   = "/tmp/output"
-	PRIVATE_KEY_PATH          = "/etc/signing-secrets/cosign.key"
-	PUB_KEY_PATH              = "/etc/signing-secrets/cosign.pub"
-	KEYRING_PUB_KEY_PATH      = "/.gnupg/pubring.gpg"
-	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
-	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
-	RETRY_ATTEMPTS            = 10
-)
-
-//GetClient returns a kubernetes client
-func GetClient(configpath string) (*kubernetes.Clientset, *rest.Config, error) {
+//GetK8sClient returns a kubernetes client and config
+func GetK8sClient(configpath string) (*kubernetes.Clientset, *rest.Config, error) {
 
 	if configpath == "" {
 		log.Debug("Using Incluster configuration")
@@ -103,70 +83,6 @@ func WriteToFile(str, dirPath, filename string) error {
 
 	return nil
 
-}
-
-func QueryAPI(url, requestType, bearerToken string, data map[string]interface{}) (string, error) {
-
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	bearer := ""
-	if bearerToken != "" {
-		bearer = "Bearer " + bearerToken
-	}
-
-	var dataJson []byte
-	if data != nil {
-		dataJson, _ = json.Marshal(data)
-	} else {
-		dataJson = nil
-	}
-	req, err := http.NewRequest(requestType, url, bytes.NewBuffer(dataJson))
-	if err != nil {
-		log.Errorf("Error %s ", err.Error())
-		return "", err
-	}
-
-	if bearer != "" {
-		req.Header.Add("Authorization", bearer)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Errorf("Error %s", err.Error())
-		return "", err
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Errorf("Error %s ", err.Error())
-		return "", err
-	}
-
-	return string([]byte(body)), nil
-}
-
-func RetriveDesiredManifest(appName string) (string, error) {
-
-	interlaceConfig, err := config.GetInterlaceConfig()
-	if err != nil {
-		log.Errorf("Error in loading config: %s", err.Error())
-	}
-
-	baseUrl := interlaceConfig.ArgocdApiBaseUrl
-
-	desiredRscUrl := fmt.Sprintf("%s/%s/managed-resources", baseUrl, appName)
-
-	token := interlaceConfig.ArgocdApiToken
-
-	desiredManifest, err := QueryAPI(desiredRscUrl, "GET", token, nil)
-
-	if err != nil {
-		log.Errorf("Error occured while querying argocd REST API %s ", err.Error())
-		return "", err
-	}
-
-	return desiredManifest, nil
 }
 
 func FileExist(fpath string) bool {

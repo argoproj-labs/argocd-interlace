@@ -3,23 +3,22 @@ module github.com/argoproj-labs/argocd-interlace
 go 1.16
 
 require (
-	github.com/argoproj/argo-cd/v2 v2.3.0
+	github.com/ProtonMail/go-crypto v0.0.0-20210707164159-52430bf6b52c
+	github.com/argoproj/argo-cd/v2 v2.3.4
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
-	github.com/in-toto/in-toto-golang v0.2.1-0.20210806133539-f50646681592
+	github.com/in-toto/in-toto-golang v0.3.4-0.20211211042327-af1f9fb822bf
 	github.com/pkg/errors v0.9.1
-	github.com/secure-systems-lab/go-securesystemslib v0.1.0
-	github.com/sigstore/cosign v1.2.0
-	github.com/sigstore/k8s-manifest-sigstore v0.1.0
+	github.com/secure-systems-lab/go-securesystemslib v0.3.1
+	github.com/sigstore/k8s-manifest-sigstore v0.3.0
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/cobra v1.2.1
-	github.com/theupdateframework/go-tuf v0.0.0-20210804171843-477a5d73800a
+	github.com/spf13/cobra v1.4.0
+	github.com/theupdateframework/go-tuf v0.0.0-20220211205608-f0c3294f63b9
 	github.com/tidwall/gjson v1.9.3
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
-	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.23.1
-	k8s.io/apimachinery v0.23.1
-	k8s.io/client-go v0.23.1
+	k8s.io/api v0.23.5
+	k8s.io/apimachinery v0.23.5
+	k8s.io/client-go v0.23.5
 )
 
 replace github.com/argoproj-labs/argocd-interlace => ./

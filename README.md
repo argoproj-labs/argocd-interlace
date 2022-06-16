@@ -16,107 +16,127 @@ The features are
 - Sign manifest
 - Record provenance in in-toto format
 
+## Getting Started
 ### Installation
 Prerequisite: Install [ArgoCD](https://argo-cd.readthedocs.io/en/stable/getting_started/) on your Kubernetes cluster before you install ArgoCD Interlace.
 
 
 To install ArgoCD Interlace, run:
 ```
-$ git clone https://github.com/argoproj-labs/argocd-interlace.git
-$ cd argocd-interlace
-$ make deploy
-```
-This automates install and setup with default configuration.
-
-(Optional) If you want to setup argocd-interlace with your existing keys, do [Key Setup](docs/key_setup.md) and `make deploy` again.
-
-To verify that installation was successful, ensure Status of pod `argocd-interlace-controller` become `Running`:
-```shell
-$ kubectl get pod -n argocd-interlace -w
-NAME                                              READY   STATUS    RESTARTS   AGE
-pod/argocd-interlace-controller-f57fd69fb-72l4h   1/1     Running   0          19m
+$ kubectl apply -f https://raw.githubusercontent.com/argoproj-labs/argocd-interlace/main/releases/release.yaml
 ```
 
-### Usage
+On OpenShift, use this instead of the above.
 
-1. Deploy ArgoCD and ArgoCD Interlace with your keys.
+```
+$ kubectl apply -f https://raw.githubusercontent.com/argoproj-labs/argocd-interlace/main/releases/release_openshift.yaml
+```
 
-    Follow the [Installation](#installation) section.
+Then you can check whether ArgoCD Interlace is running just by looking at the pod status.
 
-1. Sign your source material repository.
+```
+$ kubectl get pod -n argocd-interlace
+NAME                                           READY   STATUS    RESTARTS   AGE
+argocd-interlace-controller-5b6cd5f896-vwtrj   1/1     Running   0          2m
+```
 
-    Generate signatures using the signing script.
+### Quick Start
+By default, ArgoCD Interlace stores the generated provenance record in a custom resource `ApplicationProvenance` in `argocd-interlace` namespace.
 
-    ```
-    $ ./scripts/sign-source-repo.sh <PATH/TO/SOURCE_MATERIAL_REPO>
-    ```
+When ArgoCD syncs any Applications, ArgoCD Interlace creates the ApplicationProvenance and you can see the provenance data as below.
 
-    Then 2 files `source-materials` and `source-materials.sig` should be generated, and push them to your remote repository.
+```
+$ kubectl get appprov -n argocd-interlace
+NAME         AGE
+sample-app   3m40s
 
-1. Create ArgoCD Application which uses the signed source materials.
 
-    ```
-    $ kubectl create -n argocd -f <PATH/TO/YOUR/APPLICATION>
-    ```
-
-    This is a normal ArgoCD step.
-
-1. Check provenance data in `ApplicationProvenance` resource.
-
-    You can check the latest provenance data as below.
-
-    ```
-    $ kubectl get applicationprovenance -n argocd-interlace <APPLICATION_NAME> -o jsonpath='{.status.provenance}' | base64 -d | jq .
-    {
-        "_type": "https://in-toto.io/Statement/v0.1",
-        "predicateType": "https://slsa.dev/provenance/v0.1",
-        "subject": [
-            {
-                "name": "/tmp/output/sample-app/manifest.yaml",
-                "digest": {
-                    "sha256": "72d33174b97b178a035a16f04518ff971b1edb3d1b603c858f11e0f12befb8ca"
-                }
-            }
-        ],
-    ...
-        "predicate": {
-            ...
-            "materials": [
-                {
-                    "uri": "https://github.com/hirokuni-kitahara/sample-kustomize-app.git",
-                    "digest": {
-                    "commit": "0ff5408670b90b4a7ca69ca3829aa37e1acb39db",
-                    "path": "./",
-                    "revision": "master"
-                    }
-                }
-            ]
+$ kubectl get appprov -n argocd-interlace sample-app -o json
+{
+    "apiVersion": "interlace.argocd.dev/v1beta1",
+    "kind": "ApplicationProvenance",
+    "metadata": {
+        "creationTimestamp": "2022-06-15T00:33:07Z",
+        "generation": 1,
+        "name": "sample-app",
+        "namespace": "argocd-interlace",
+        "resourceVersion": "1553595",
+        "uid": "bc081b63-0595-4917-9a0e-2869a7dd1eeb"
+    },
+    "spec": {
+        "application": {
+            "name": "sample-app",
+            "namespace": "argocd"
         }
+    },
+    "status": {
+        "lastUpdated": "2022-06-15T07:04:05Z",
+        "results": [
+            {
+                "manifest": "ICBh  ...  ODAK",      // base64 encoded resource manifest
+                "provenance": "eyJf  ...  fQ==",    // base64 encoded provenance data
+                "sourceVerified": false,            // whether source material was verified or not
+                "time": "2022-06-15T07:04:05Z"      // timestamp of the update
+            }
+        ]
     }
-    ```
+}
+```
 
-    `subject` field in the provenance contains the digest value of the generated manifest, and `materials` is a list of source material repositories with commit ID.
+In the `spec` field, you can find which `Application` was the target of this provenance data.
 
-    Also, you can check the detail information of the provenance in the log.
-    ```
-    $ kubectl logs -n argocd-interlace deployment.apps/argocd-interlace-controller
-    ...
-    time="2022-03-07T09:01:32Z" level=info msg="[INFO][sample-app] Created entry at index 1579738, available at: https://rekor.sigstore.dev/api/v1/log/entries/7ab813bb62f0d87ad7191856bd12fb8b640ca75a797169265cdc813bb435108f\n"
-    ```
+In the `status` field, you can find the generated manifest for the `Application` sync and the provenance data generated by ArgoCD Interlace. (These two values are encoded in base64.)
 
-### Customize Settings
+For more details about the provenance data, you can refer this [doc](docs/provenance.md)
 
-To customize settings of ArgoCD Interlace, you can follow these documents:
-* [ArgoCD REST API authentication for querying ArgoCD REST API to retrive desired manifest for an application](docs/argo_setup.md)
-* [Configuring source material repository](docs/configure_source_materials.md)
-* [Signing source materials](docs/configure_source_materials.md)
-* [Cosign based signing keys for creating signature for desired manifest.](docs/signing_key_setup.md)
-* [Verification key setup for verifying source materials](docs/verification_key_setup.md)
+### Additional Features
 
+ArgoCD Interlace supports **3 other features** other than provenance recording.
+
+**1. Verify source material contents before generating provenance**
+
+Before ArgoCD Interlace generates provenance data, it can verify the source metrial contents.
+For that, you can sign the source meterials (Git Repo / Helm) beforehand (see the [doc](docs/signing_source_material.md)).
+This allows you to confirm that the source contents of the synced application is valid by verifying the signature.
+
+You can enable this feature by configuring the secret `source-material-verify-key` in argocd-interlace namespace.
+You can do it by the following command. `<PATH/TO/PUBLIC_KEY>` should be the actual filepath (refer [this](docs/key_setup.md) about key setup).
+
+```
+$ KEY_PATH=<PATH/TO/PUBLIC_KEY> kubectl patch secret source-material-verify-key -n argocd-interlace -p="{\"data\":{\"public_key_pem\":\""(cat $KEY_PATH | base64)"\"}}"
+```
+
+*Note that it takes about a minute that the key in the running pod is updated after this command.*
+
+With this feature, `sourceVerified` field in the ApplicationProvenance status will be `true` if the verification successfully finishes.
+
+**2. Sign the generated provenance data**
+
+By default, ArgoCD Interlace just generates a provenance data and the data is not authorized.
+You can enable signing feature for the generated provenance data so that the provenance data can be verified when it is used somewhere other than ArgoCD / ArgoCD Interlace.
+
+By configuring the secret `interlace-signing-key` in argocd-interlace namespace, you can enable this.
+You can do it by the following command. `<PATH/TO/PRIVATE_KEY>` should be the actual filepath (refer [this](docs/key_setup.md) about key setup).
+
+```
+$ KEY_PATH=<PATH/TO/PRIVATE_KEY> kubectl patch secret interlace-signing-key -n argocd-interlace -p="{\"data\":{\"private_key_pem\":\""(cat $KEY_PATH | base64)"\"}}"
+```
+
+*Note that it takes about a minute that the key in the running pod is updated after this command.*
+
+With this feature, `signature` field is added to the status in ApplciationProvenance and it contains the generated signature.
+
+**3. Sign the manifest generated by ArgoCD**
+
+Additionally, you can enable signing feature for the YAML manifest geneated by ArgoCD.
+For this, ArgoCD Interlace leverages the manifest signing feature provided by sigstore community ([k8s-manifest-sigstore](https://github.com/sigstore/k8s-manifest-sigstore)).
+
+To enable this, you can add a ConfigMap resource with a label `signatureResource: true` to your source material repository.
+When this ConfigMap is found in the synced resources, ArgoCD Interlace signs the YAML manifest and the signature will be stored in the ConfigMap on the cluster.
+This feature requires the 2 secrets configured by the above steps.
 
 ## Example Scenario
 To see ArgoCD Interlace in action, check the [example scenario](docs/example_scenario.md).
 
-
- ### Demo
- ![intro](images/intro.gif?)
+### Demo
+![intro](images/intro.gif?)

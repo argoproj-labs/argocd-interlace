@@ -19,14 +19,17 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/mapnode"
 	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -38,26 +41,19 @@ func GenerateInitialManifest(appData application.ApplicationData) (bool, error) 
 	appDirPath := appData.AppDirPath
 
 	// Retrive the desired state of manifest via argocd API call
-	desiredManifest, err := utils.RetriveDesiredManifest(appName)
+	desiredManifests, err := argoutil.RetriveDesiredManifest(appName)
 	if err != nil {
 		log.Errorf("Error in retriving desired manifest : %s", err.Error())
 		return false, err
 	}
 
-	items := gjson.Get(desiredManifest, "items")
-
 	finalManifest := ""
-
-	for i, item := range items.Array() {
-
-		targetState := gjson.Get(item.String(), "targetState").String()
-
-		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(items.Array())-1)
+	for i, targetState := range desiredManifests {
+		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(desiredManifests)-1)
 	}
 
 	if finalManifest != "" {
-
-		err := utils.WriteToFile(string(finalManifest), appDirPath, utils.MANIFEST_FILE_NAME)
+		err := utils.WriteToFile(string(finalManifest), appDirPath, config.MANIFEST_FILE_NAME)
 		if err != nil {
 			log.Errorf("Error in writing manifest to file: %s", err.Error())
 			return false, err
@@ -76,18 +72,15 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(yamlBytes)
 
 	// Retrive the desired state of manifest via argocd API call
-	desiredManifest, err := utils.RetriveDesiredManifest(appData.AppName)
+	desiredManifests, err := argoutil.RetriveDesiredManifest(appData.AppName)
 	if err != nil {
 		log.Errorf("Error in retriving desired manifest : %s", err.Error())
 		return false, err
 	}
 
-	items := gjson.Get(desiredManifest, "items")
-
 	// For each resource in desired manifest
 	// Check if it has changed from the version that exist in the bundle manifest
-	for i, item := range items.Array() {
-		targetState := gjson.Get(item.String(), "targetState").String()
+	for i, targetState := range desiredManifests {
 		if diffCount == 0 {
 			diffExist, err := checkDiff([]byte(targetState), manifestYAMLs)
 			if err != nil {
@@ -98,12 +91,12 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 			}
 		}
 		// Add desired state of each resource to finalManifest
-		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(items.Array())-1)
+		finalManifest = prepareFinalManifest(targetState, finalManifest, i, len(desiredManifests)-1)
 
 	}
 
 	if finalManifest != "" {
-		err := utils.WriteToFile(string(finalManifest), appData.AppDirPath, utils.MANIFEST_FILE_NAME)
+		err := utils.WriteToFile(string(finalManifest), appData.AppDirPath, config.MANIFEST_FILE_NAME)
 		if err != nil {
 			log.Errorf("Error in writing manifest to file: %s", err.Error())
 			return false, err
@@ -112,6 +105,11 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	}
 
 	return false, nil
+}
+
+func GetManifest(appData application.ApplicationData) ([]byte, error) {
+	fpath := filepath.Join(appData.AppDirPath, config.MANIFEST_FILE_NAME)
+	return ioutil.ReadFile(fpath)
 }
 
 func checkDiff(targetObjYAMLBytes []byte, manifestYAMLs [][]byte) (bool, error) {

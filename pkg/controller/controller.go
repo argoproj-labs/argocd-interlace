@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"time"
@@ -48,8 +49,10 @@ type controller struct {
 	argocdInterlaceNamespace string
 }
 
-func Start(ctx context.Context, kubeconfig string, argocdNamespace string, config *interlaceCfg.InterlaceConfig) {
-	_, cfg, err := utils.GetClient(kubeconfig)
+func Start(ctx context.Context, kubeconfig string, config *interlaceCfg.InterlaceConfig) {
+	configBytes, _ := json.Marshal(config)
+	log.Debugf("Interlace config: %s", string(configBytes))
+	_, cfg, err := utils.GetK8sClient(kubeconfig)
 	appClientset := appClientset.NewForConfigOrDie(cfg)
 	if err != nil {
 		log.Fatalf("Error in starting argocd interlace controller: %s", err.Error())
@@ -60,8 +63,10 @@ func Start(ctx context.Context, kubeconfig string, argocdNamespace string, confi
 	}
 
 	interlaceNS := ""
+	argocdNamespace := ""
 	if config != nil {
 		interlaceNS = config.ArgocdInterlaceNamespace
+		argocdNamespace = config.ArgocdNamespace
 	}
 
 	c := newController(appClientset, appProvClientset, argocdNamespace, interlaceNS)
@@ -106,7 +111,7 @@ func newController(applicationClientset appClientset.Interface, appProvClientset
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 
 			app, ok := obj.(*appv1.Application)
-
+			log.Debugf("create event for app `%s`", app.GetName())
 			if ok {
 				err := interlace.CreateEventHandler(app, appProvClientset, interlaceNS)
 				if err != nil {
@@ -126,6 +131,7 @@ func newController(applicationClientset appClientset.Interface, appProvClientset
 			key, err := cache.MetaNamespaceKeyFunc(old)
 			oldApp, oldOK := old.(*appv1.Application)
 			newApp, newOK := new.(*appv1.Application)
+			log.Debugf("update event for app `%s`", newApp.GetName())
 			if oldOK && newOK {
 				err := interlace.UpdateEventHandler(oldApp, newApp, appProvClientset, interlaceNS)
 				if err != nil {

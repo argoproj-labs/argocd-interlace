@@ -23,46 +23,50 @@ import (
 	"time"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
+	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance/attestation"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
+	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	log "github.com/sirupsen/logrus"
 )
 
-type Provenance struct {
+type HelmProvenanceManager struct {
 	appData application.ApplicationData
-	ref     *provenance.ProvenanceRef
+	prov    in_toto.Statement
+	sig     []byte
+	ref     provenance.ProvenanceRef
 }
 
 const (
 	ProvenanceAnnotation = "helm"
 )
 
-func NewProvenance(appData application.ApplicationData) (*Provenance, error) {
-	return &Provenance{
+func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceManager, error) {
+	return &HelmProvenanceManager{
 		appData: appData,
 	}, nil
 }
 
-func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appSourceRevision := p.appData.AppSourceRevision
 	appDirPath := p.appData.AppDirPath
 	chart := p.appData.Chart
 
-	entryPoint := "helm install"
+	entryPoint := "helm"
 	helmChart := fmt.Sprintf("%s-%s.tgz", chart, appSourceRevision)
-	recipe := in_toto.ProvenanceRecipe{
-		EntryPoint: entryPoint,
-		Arguments:  []string{chart + "  " + helmChart},
+	invocation := intotoprov02.ProvenanceInvocation{
+		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
+		Parameters:   []string{"install", chart, helmChart},
 	}
 
 	subjects := []in_toto.Subject{}
 
 	targetDigest = strings.ReplaceAll(targetDigest, "sha256:", "")
 	subjects = append(subjects, in_toto.Subject{Name: target,
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256": targetDigest,
 		},
 	})
@@ -72,68 +76,72 @@ func (p *Provenance) GenerateProvanance(target, targetDigest string, uploadTLog 
 	it := in_toto.Statement{
 		StatementHeader: in_toto.StatementHeader{
 			Type:          in_toto.StatementInTotoV01,
-			PredicateType: in_toto.PredicateSLSAProvenanceV01,
+			PredicateType: intotoprov02.PredicateSLSAProvenance,
 			Subject:       subjects,
 		},
-		Predicate: in_toto.ProvenancePredicate{
-			Metadata: &in_toto.ProvenanceMetadata{
+		Predicate: intotoprov02.ProvenancePredicate{
+			Metadata: &intotoprov02.ProvenanceMetadata{
 				Reproducible:    true,
 				BuildStartedOn:  &buildStartedOn,
 				BuildFinishedOn: &buildFinishedOn,
 			},
 
-			Materials: materials,
-			Recipe:    recipe,
+			Materials:  materials,
+			Invocation: invocation,
 		},
 	}
+	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
 		log.Errorf("Error in marshaling attestation:  %s", err.Error())
 		return err
 	}
 
-	err = utils.WriteToFile(string(b), appDirPath, utils.PROVENANCE_FILE_NAME)
+	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
 		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
 		return err
 	}
 
-	provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
 	}
+	if provSig != nil {
+		p.sig = provSig
+	}
 	if provRef != nil {
-		p.ref = provRef
+		p.ref = *provRef
 	}
 
 	return nil
 }
 
-func (p *Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
+func (p *HelmProvenanceManager) generateMaterial() []intotoprov02.ProvenanceMaterial {
 
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
 	appSourceRevision := p.appData.AppSourceRevision
 	chart := p.appData.Chart
 	values := p.appData.Values
-	materials := []in_toto.ProvenanceMaterial{}
+	materials := []intotoprov02.ProvenanceMaterial{}
 
 	helmChartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, appSourceRevision)
 	chartHash, _ := utils.ComputeHash(helmChartPath)
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 		URI: appSourceRepoUrl + ".git",
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"sha256hash": chartHash,
 			"revision":   appSourceRevision,
 			"name":       chart,
 		},
 	})
 
-	materials = append(materials, in_toto.ProvenanceMaterial{
+	materials = append(materials, intotoprov02.ProvenanceMaterial{
 
-		Digest: in_toto.DigestSet{
+		Digest: intotoprov02.DigestSet{
 			"material":   "values",
 			"parameters": values,
 		},
@@ -141,7 +149,7 @@ func (p *Provenance) generateMaterial() []in_toto.ProvenanceMaterial {
 	return materials
 }
 
-func (p *Provenance) VerifySourceMaterial() (bool, error) {
+func (p *HelmProvenanceManager) VerifySourceMaterial() (bool, error) {
 
 	appPath := p.appData.AppPath
 	repoUrl := p.appData.AppSourceRepoUrl
@@ -150,6 +158,10 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 	mkDirCmd := "mkdir"
 	_, err := utils.CmdExec(mkDirCmd, "", appPath)
+	if err != nil {
+		log.Infof("mkdir returns error : %s ", err.Error())
+		return false, err
+	}
 	helmChartUrl := fmt.Sprintf("%s/%s-%s.tgz", repoUrl, chart, targetRevision)
 
 	chartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
@@ -182,6 +194,10 @@ func (p *Provenance) VerifySourceMaterial() (bool, error) {
 
 }
 
-func (p *Provenance) GetReference() *provenance.ProvenanceRef {
-	return p.ref
+func (p *HelmProvenanceManager) GetProvenance() in_toto.Statement {
+	return p.prov
+}
+
+func (p *HelmProvenanceManager) GetProvSignature() []byte {
+	return p.sig
 }

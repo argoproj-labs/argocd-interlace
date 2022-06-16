@@ -1,12 +1,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 subjects:
   - kind: ServiceAccount
     name: argocd-interlace-controller
     namespace: argocd-interlace
 roleRef:
   kind: ClusterRole
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
   apiGroup: rbac.authorization.k8s.io

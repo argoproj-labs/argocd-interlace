@@ -17,13 +17,9 @@
 package interlace
 
 import (
-	"context"
-	"encoding/base64"
-	"fmt"
 	"path/filepath"
 	"time"
 
-	appprov "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
 	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
@@ -34,19 +30,15 @@ import (
 	kustprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/kustomize"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
-	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-const provenanceAnnotationKey = "interlace.argocd.dev/provenance"
 
 func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientset.Interface, interlaceNS string) error {
 
-	appName := app.ObjectMeta.Name
+	appName := app.GetName()
+	appNS := app.GetNamespace()
 	appClusterUrl := app.Spec.Destination.Server
 
 	// Do not use app.Status  in create event.
@@ -59,6 +51,8 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 		appSourceCommitSha = commitSha
 	}
 
+	interlaceConfig, _ := config.GetInterlaceConfig()
+
 	log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
 	appPath := ""
 	appDirPath := ""
@@ -68,8 +62,8 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 	var version string
 	isHelm := app.Spec.Source.IsHelm()
 	if isHelm {
-		appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
-		appDirPath = filepath.Join(utils.TMP_DIR, appName)
+		appPath = filepath.Join(interlaceConfig.WorkspaceDir, appName)
+		appDirPath = appPath
 
 		//ValuesFiles is a list of Helm value files to use when generating a template
 		valueFiles = app.Spec.Source.Helm.ValueFiles
@@ -82,51 +76,49 @@ func CreateEventHandler(app *appv1.Application, appProvClientset appprovClientse
 
 	} else {
 		appPath = app.Spec.Source.Path
-		appDirPath = filepath.Join(utils.TMP_DIR, appName, appPath)
+		appDirPath = filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 
 	}
 
 	appSourcePreiviousCommitSha := ""
 	var err error
 	sourceVerified := false
+	appDestNamespace := app.Spec.Destination.Namespace
 
 	chart := app.Spec.Source.Chart
-	appData, _ := application.NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
+	appData, _ := application.NewApplicationData(appName, appNS, appPath, appDirPath, appClusterUrl,
 		appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-		chart, isHelm, valueFiles, releaseName, values, version)
+		appDestNamespace, chart, isHelm, valueFiles, releaseName, values, version)
 
+	var provMgr provenance.ProvenanceManager
 	if isHelm {
 		log.Infof("[INFO][%s]: Interlace detected creation of new Application resource: %s", appName, appName)
-		prov, _ := helmprov.NewProvenance(*appData)
-		sourceVerified, err = prov.VerifySourceMaterial()
-		if err != nil {
-			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
-			return err
-		}
+		provMgr, _ = helmprov.NewProvenanceManager(*appData)
 	} else {
-		prov, _ := kustprov.NewProvenance(*appData)
-		sourceVerified, err = prov.VerifySourceMaterial()
-
-		if err != nil {
-			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
-			return err
+		provMgr, _ = kustprov.NewProvenanceManager(*appData)
+	}
+	sourceVerifySkipped := false
+	sourceVerified, err = provMgr.VerifySourceMaterial()
+	if err != nil {
+		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
+		return err
+	} else {
+		if !sourceVerified {
+			sourceVerifySkipped = true
 		}
 	}
+
 	log.Info("sourceVerified ", sourceVerified)
-	if sourceVerified {
+	log.Info("sourceVerifySkipped ", sourceVerifySkipped)
+	if sourceVerified || sourceVerifySkipped {
 		log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-		prov, err := signManifestAndGenerateProvenance(*appData, true, sourceVerified)
+		storageBackend, err := signManifestAndGenerateProvenance(*appData, true, appProvClientset, sourceVerified, sourceVerifySkipped)
 		if err != nil {
 			return err
 		}
-		if prov != nil {
-			provURL := prov.GetReference().URL
-			log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
-			err = createOrUpdateApplicationProvenance(appProvClientset, app, prov, interlaceNS)
-			if err != nil {
-				return err
-			}
+		if storageBackend != nil {
+			log.Infof("[INFO][%s]: provenance data is stored in %s", appName, storageBackend.GetDestinationString())
 		} else {
 			log.Infof("[INFO][%s]: provenance data is nil", appName)
 		}
@@ -157,13 +149,17 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 		generateManifest = true
 	}
 
+	interlaceConfig, _ := config.GetInterlaceConfig()
+
 	if generateManifest {
 
-		appName := newApp.ObjectMeta.Name
+		appName := newApp.GetName()
+		appNS := newApp.GetNamespace()
 		appPath := newApp.Status.Sync.ComparedTo.Source.Path
 		appSourceRepoUrl := newApp.Status.Sync.ComparedTo.Source.RepoURL
 		appSourceRevision := newApp.Status.Sync.ComparedTo.Source.TargetRevision
 		appSourceCommitSha := newApp.Status.Sync.Revision
+		appDestNamespace := newApp.Spec.Destination.Namespace
 		appClusterUrl := newApp.Status.Sync.ComparedTo.Destination.Server
 		revisionHistories := newApp.Status.History
 		appSourcePreiviousCommitSha := ""
@@ -192,52 +188,45 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 			log.Info("len(valueFiles)", len(valueFiles))
 			log.Info("releaseName", releaseName)
 			log.Info("version", version)
-			appPath = fmt.Sprintf("%s/%s", "/tmp", appName)
-		} else {
-			appPath = newApp.Spec.Source.Path
+			appPath = filepath.Join(interlaceConfig.WorkspaceDir, appName)
 		}
 
-		appDirPath := filepath.Join(utils.TMP_DIR, appName, appPath)
+		appDirPath := filepath.Join(interlaceConfig.WorkspaceDir, appName, appPath)
 		chart := newApp.Spec.Source.Chart
-		appData, _ := application.NewApplicationData(appName, appPath, appDirPath, appClusterUrl,
+		appData, _ := application.NewApplicationData(appName, appNS, appPath, appDirPath, appClusterUrl,
 			appSourceRepoUrl, appSourceRevision, appSourceCommitSha, appSourcePreiviousCommitSha,
-			chart, isHelm, valueFiles, releaseName, values, version)
+			appDestNamespace, chart, isHelm, valueFiles, releaseName, values, version)
 
 		log.Infof("[INFO][%s]: Interlace detected update of an exsiting Application resource: %s", appName, appName)
 
+		var provMgr provenance.ProvenanceManager
 		if isHelm {
-
-			prov, _ := helmprov.NewProvenance(*appData)
-			sourceVerified, err = prov.VerifySourceMaterial()
-			if err != nil {
-				log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
-				return err
-			}
+			provMgr, _ = helmprov.NewProvenanceManager(*appData)
 		} else {
-			prov, _ := kustprov.NewProvenance(*appData)
-			sourceVerified, err = prov.VerifySourceMaterial()
-
-			if err != nil {
-				log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
-				return err
+			provMgr, _ = kustprov.NewProvenanceManager(*appData)
+		}
+		sourceVerifySkipped := false
+		sourceVerified, err = provMgr.VerifySourceMaterial()
+		if err != nil {
+			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials failed: %s", appName, appName)
+			return err
+		} else {
+			if !sourceVerified {
+				sourceVerifySkipped = true
 			}
 		}
 
 		log.Info("sourceVerified ", sourceVerified)
-		if sourceVerified {
+		log.Info("sourceVerifySkipped ", sourceVerifySkipped)
+		if sourceVerified || sourceVerifySkipped {
 			log.Infof("[INFO][%s]: Interlace's signature verification of Application source materials succeeded: %s", appName, appName)
 
-			prov, err := signManifestAndGenerateProvenance(*appData, created, sourceVerified)
+			storageBackend, err := signManifestAndGenerateProvenance(*appData, created, appProvClientset, sourceVerified, sourceVerifySkipped)
 			if err != nil {
 				return err
 			}
-			if prov != nil {
-				provURL := prov.GetReference().URL
-				log.Infof("[INFO][%s]: Generated provenance data is available at: %s", appName, provURL)
-				err = createOrUpdateApplicationProvenance(appProvClientset, newApp, prov, interlaceNS)
-				if err != nil {
-					return err
-				}
+			if storageBackend != nil {
+				log.Infof("[INFO][%s]: provenance data is stored in %s", appName, storageBackend.GetDestinationString())
 			} else {
 				log.Infof("[INFO][%s]: provenance data is nil", appName)
 			}
@@ -247,7 +236,7 @@ func UpdateEventHandler(oldApp, newApp *appv1.Application, appProvClientset appp
 	return nil
 }
 
-func signManifestAndGenerateProvenance(appData application.ApplicationData, created bool, sourceVerified bool) (provenance.Provenance, error) {
+func signManifestAndGenerateProvenance(appData application.ApplicationData, created bool, appProvClientset appprovClientset.Interface, sourceVerified, sourceVerifySkipped bool) (storage.StorageBackend, error) {
 
 	interlaceConfig, err := config.GetInterlaceConfig()
 	if err != nil {
@@ -255,18 +244,22 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 		return nil, nil
 	}
 
-	manifestStorageType := interlaceConfig.ManifestStorageType
-
-	allStorageBackEnds, err := storage.InitializeStorageBackends(appData, manifestStorageType)
-
+	storageConfig := storage.StorageConfig{
+		ManifestStorageType:  interlaceConfig.ManifestStorageType,
+		AppData:              appData,
+		AppProvClientset:     appProvClientset,
+		InterlaceNS:          interlaceConfig.ArgocdInterlaceNamespace,
+		MaxResultsInResource: interlaceConfig.MaxResultsInResource,
+		UploadTLog:           interlaceConfig.UploadTLog,
+	}
+	allStorageBackEnds, err := storage.InitializeStorageBackends(storageConfig)
 	if err != nil {
 		log.Errorf("Error in initializing storage backends: %s", err.Error())
 		return nil, err
 	}
+	storageBackend := allStorageBackEnds[interlaceConfig.ManifestStorageType]
 
-	storageBackend := allStorageBackEnds[manifestStorageType]
-
-	var prov provenance.Provenance
+	var provMgr provenance.ProvenanceManager
 	if storageBackend != nil {
 
 		manifestGenerated := false
@@ -313,113 +306,38 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, crea
 		}
 		log.Info("manifestGenerated ", manifestGenerated)
 		if manifestGenerated {
-
 			err = storageBackend.StoreManifestBundle(sourceVerified)
 			if err != nil {
 				log.Errorf("Error in storing latest manifest bundle(signature, prov) %s", err.Error())
 				return nil, err
 			}
-
 		}
 
 		buildFinishedOn := time.Now().In(loc)
-
 		log.Info("buildFinishedOn:", buildFinishedOn, " loc ", loc)
-
-		if interlaceConfig.AlwaysGenerateProv {
-
-			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
+		if manifestGenerated || interlaceConfig.AlwaysGenerateProv {
+			err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn, sourceVerified)
 			if err != nil {
 				log.Errorf("Error in storing manifest provenance: %s", err.Error())
 				return nil, err
 			}
-
-		} else {
-			if manifestGenerated {
-				err = storageBackend.StoreManifestProvenance(buildStartedOn, buildFinishedOn)
-				if err != nil {
-					log.Errorf("Error in storing manifest provenance: %s", err.Error())
-					return nil, err
-				}
-			}
 		}
 
-		prov = storageBackend.GetProvenance()
+		provMgr = storageBackend.GetProvenanceManager()
 	} else {
-
-		return nil, fmt.Errorf("Could not find storage backend")
+		return nil, errors.New("Could not find storage backend")
 	}
-	if prov == nil {
+	if provMgr == nil {
 		log.Info("storageBackend.GetProvenance() returns nli")
 	} else {
-		log.Infof("storageBackend.GetProvenance() returns provenance with uuid: %s, url: %s", prov.GetReference().UUID, prov.GetReference().URL)
-	}
-
-	return prov, nil
-}
-
-func createOrUpdateApplicationProvenance(appProvClientset appprovClientset.Interface, app *appv1.Application, prov provenance.Provenance, interlaceNS string) error {
-	appName := app.GetName()
-	appNamespace := app.GetNamespace()
-
-	appprovName := appName
-
-	b64ProvData, err := prov.GetReference().GetAttestation()
-	if err != nil {
-		provURL := prov.GetReference().URL
-		return errors.Wrap(err, fmt.Sprintf("failed to get provenance data from %s", provURL))
-	}
-	provData, err := base64.StdEncoding.DecodeString(string(b64ProvData))
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to get decode the base64 encoded provenance data"))
-	}
-	appprovExists := false
-	current, err := appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Get(context.TODO(), appprovName, metav1.GetOptions{})
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, fmt.Sprintf("failed to get %s", appprovName))
-		}
-	} else {
-		appprovExists = true
-	}
-
-	var newone *appprov.ApplicationProvenance
-	doneMsg := "created"
-	now := metav1.NewTime(time.Now().UTC())
-	if appprovExists {
-		newone = current
-		newone.Status = appprov.ApplicationProvenanceStatus{
-			LastUpdated: now,
-			Provenance:  provData,
-		}
-		_, err = appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Update(context.TODO(), newone, metav1.UpdateOptions{})
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("failed to update ApplicationProvenance `%s`", appprovName))
-		}
-		doneMsg = "updated"
-	} else {
-		newone = &appprov.ApplicationProvenance{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: interlaceNS,
-				Name:      appprovName,
-			},
-			Spec: appprov.ApplicationProvenanceSpec{
-				Application: appprov.ApplicationRef{
-					Namespace: appNamespace,
-					Name:      appName,
-				},
-			},
-			Status: appprov.ApplicationProvenanceStatus{
-				LastUpdated: now,
-				Provenance:  provData,
-			},
-		}
-		_, err = appProvClientset.InterlaceV1beta1().ApplicationProvenances(interlaceNS).Create(context.TODO(), newone, metav1.CreateOptions{})
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("failed to create ApplicationProvenance `%s`", appprovName))
+		prov := provMgr.GetProvenance()
+		if len(prov.Subject) > 0 {
+			subjectName := prov.Subject[0].Name
+			if subjectName != "" {
+				log.Infof("storageBackend.GetProvenance() returns provenance for subject `%s`", subjectName)
+			}
 		}
 	}
-	log.Infof("ApplicationProvenance `%s` is %s", appprovName, doneMsg)
 
-	return nil
+	return storageBackend, nil
 }

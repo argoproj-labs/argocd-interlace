@@ -47,7 +47,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 rules:
 - apiGroups:
   - argoproj.io
@@ -86,11 +86,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: argocd-interlace-controller-tenant-access
+  name: argocd-interlace-controller
 subjects:
 - kind: ServiceAccount
   name: argocd-interlace-controller
@@ -98,32 +98,19 @@ subjects:
 ---
 apiVersion: v1
 data:
-  ARGOCD_API_BASE_URL: UkVQTEFDRSBUSElTCg==
-  ARGOCD_NAMESPACE: YXJnb2NkCg==
-  ARGOCD_PWD: UkVQTEFDRSBUSElTCg==
-  ARGOCD_TOKEN: UkVQTEFDRSBUSElTCg==
+  private_key_pem: ""
 kind: Secret
 metadata:
-  name: argocd-token-secret
+  name: interlace-signing-key
   namespace: argocd-interlace
 type: Opaque
 ---
 apiVersion: v1
 data:
-  pubring.gpg: UkVQTEFDRSBUSElTCg==
+  public_key_pem: ""
 kind: Secret
 metadata:
-  name: keyring-secret
-  namespace: argocd-interlace
-type: Opaque
----
-apiVersion: v1
-data:
-  cosign.key: UkVQTEFDRSBUSElTCg==
-  cosign.pub: UkVQTEFDRSBUSElTCg==
-kind: Secret
-metadata:
-  name: signing-secrets
+  name: source-material-verify-key
   namespace: argocd-interlace
 type: Opaque
 ---
@@ -143,15 +130,11 @@ spec:
         app: argocd-interlace-controller
     spec:
       containers:
-      - args:
-        - --namespace=argocd
-        command:
+      - command:
         - argocd-interlace
         env:
-        - name: DOCKER_CONFIG
-          value: /tmp/.docker/
         - name: MANIFEST_STORAGE_TYPE
-          value: annotation
+          value: resource
         - name: REKOR_SERVER
           value: https://rekor.sigstore.dev
         - name: SOURCE_MATERIAL_SIGNATURE
@@ -162,59 +145,43 @@ spec:
           value: "true"
         - name: COSIGN_PASSWORD
           value: ""
-        - name: COSIGN_EXPERIMENTAL
-          value: "1"
         - name: MANIFEST_ARGOCD_PROJECT
           value: default
+        - name: HELM_PLUGINS
+          value: /root/.local/share/helm/plugins
         - name: SIGNATURE_RSC_LABEL
-          value: isSignatureResource
+          value: signatureResource
+        - name: MAX_RESULTS_IN_RESOURCE
+          value: "10"
         - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
           value: info
         - name: ARGOCD_INTERLACE_LOG_LEVEL
           value: info
-        - name: ARGOCD_NAMESPACE
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_NAMESPACE
-              name: argocd-token-secret
         - name: ARGOCD_INTERLACE_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        - name: ARGOCD_API_BASE_URL
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_API_BASE_URL
-              name: argocd-token-secret
-        - name: ARGOCD_TOKEN
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_TOKEN
-              name: argocd-token-secret
-        - name: ARGOCD_PWD
-          valueFrom:
-            secretKeyRef:
-              key: ARGOCD_PWD
-              name: argocd-token-secret
-        - name: HELM_PLUGINS
-          value: /root/.local/share/helm/plugins
-        image: ghcr.io/argoproj-labs/argocd-interlace-controller:dev
+        - name: ARGOCD_NAMESPACE
+          value: argocd
+        - name: ARGOCD_SERVER_SERVICE_NAME
+          value: argocd-server
+        - name: ARGOCD_USER_SECRET_NAME
+          value: argocd-initial-admin-secret
+        - name: ARGOCD_USER_SECRET_PASSFIELD
+          value: password
+        image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.2.0
         imagePullPolicy: Always
         name: argocd-interlace-controller
         volumeMounts:
-        - mountPath: /tmp/output
-          name: output
-        - mountPath: /etc/signing-secrets
-          name: signing-secrets
-        - mountPath: /.gnupg/
-          name: keyring-secret
+        - mountPath: /etc/signkey
+          name: sign-key
+        - mountPath: /etc/verifykey
+          name: verify-key
       serviceAccountName: argocd-interlace-controller
       volumes:
-      - name: signing-secrets
+      - name: sign-key
         secret:
-          secretName: signing-secrets
-      - name: keyring-secret
+          secretName: interlace-signing-key
+      - name: verify-key
         secret:
-          secretName: keyring-secret
-      - emptyDir: {}
-        name: output
+          secretName: source-material-verify-key

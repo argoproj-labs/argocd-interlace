@@ -1,53 +1,21 @@
 - op: add
-  path: /spec/template/spec/containers/0/env
+  path: /spec/template/spec/containers/0/env/-
   value:
-    - name: DOCKER_CONFIG
-      value: /tmp/.docker/
-    - name: MANIFEST_STORAGE_TYPE
-      value:  annotation      
-    - name: REKOR_SERVER
-      value: https://rekor.sigstore.dev
-    - name: SOURCE_MATERIAL_SIGNATURE
-      value: "source-materials.sig"
-    - name: SOURCE_MATERIAL_HASH_LIST
-      value: "source-materials"
-    - name: ALWAYS_GENERATE_PROV
-      value: "true"
-    - name: COSIGN_PASSWORD
-      value: ""
-    - name: COSIGN_EXPERIMENTAL
-      value: "1"
-    - name: MANIFEST_ARGOCD_PROJECT
-      value: default
-    - name: SIGNATURE_RSC_LABEL
-      value: "isSignatureResource"
-    - name: K8S_MANIFEST_SIGSTORE_LOG_LEVEL
-      value: info
-    - name: ARGOCD_INTERLACE_LOG_LEVEL
-      value: info
-    - name: "ARGOCD_NAMESPACE"  
-      valueFrom:
-        secretKeyRef:
-          name: argocd-token-secret
-          key: ARGOCD_NAMESPACE
-    - name: "ARGOCD_INTERLACE_NAMESPACE"  
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-    - name: ARGOCD_API_BASE_URL
-      valueFrom:
-        secretKeyRef:
-          name: argocd-token-secret
-          key: ARGOCD_API_BASE_URL
-    - name: ARGOCD_TOKEN
-      valueFrom:
-        secretKeyRef:
-          name: argocd-token-secret
-          key: ARGOCD_TOKEN
-    - name: ARGOCD_PWD
-      valueFrom:
-        secretKeyRef:
-          name: argocd-token-secret
-          key: ARGOCD_PWD
-    - name: HELM_PLUGINS
-      value: /root/.local/share/helm/plugins
+    name: "ARGOCD_NAMESPACE"
+    value: "argocd"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_SERVER_SERVICE_NAME"
+    value: "argocd-server"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_USER_SECRET_NAME"
+    value: "argocd-initial-admin-secret"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_USER_SECRET_PASSFIELD"
+    value: "password"
+

@@ -17,7 +17,8 @@
 package annotation
 
 import (
-	"fmt"
+	"encoding/json"
+	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -29,7 +30,9 @@ import (
 	kustprov "github.com/argoproj-labs/argocd-interlace/pkg/provenance/kustomize"
 	"github.com/argoproj-labs/argocd-interlace/pkg/sign"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,37 +42,58 @@ const (
 	StorageBackendAnnotation = "annotation"
 )
 
-type StorageBackend struct {
-	appData    application.ApplicationData
-	Provenance provenance.Provenance
+type AnnotationStorageBackend struct {
+	appData application.ApplicationData
+	provMgr provenance.ProvenanceManager
+
+	uploadTLog bool
 }
 
-func NewStorageBackend(appData application.ApplicationData) (*StorageBackend, error) {
-	return &StorageBackend{
-		appData: appData,
+func NewStorageBackend(appData application.ApplicationData, uploadTLog bool) (*AnnotationStorageBackend, error) {
+	return &AnnotationStorageBackend{
+		appData:    appData,
+		uploadTLog: uploadTLog,
 	}, nil
 }
 
-func (s *StorageBackend) GetLatestManifestContent() ([]byte, error) {
+func (s *AnnotationStorageBackend) GetLatestManifestContent() ([]byte, error) {
 	return nil, nil
 }
 
-func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
+func (s *AnnotationStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
-	keyPath := utils.PRIVATE_KEY_PATH
-	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
-	signedManifestPath := filepath.Join(s.appData.AppDirPath, utils.SIGNED_MANIFEST_FILE_NAME)
+	keyPath := config.OutputSignKeyPath
+	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
+	signedManifestPath := filepath.Join(s.appData.AppDirPath, config.SIGNED_MANIFEST_FILE_NAME)
 
-	signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
-
+	manifestBytes, err := ioutil.ReadFile(manifestPath)
 	if err != nil {
-		log.Errorf("Error in signing manifest: %s", err.Error())
-		return err
+		return errors.Wrap(err, "error in reading manifest")
 	}
+	log.Debugf("manifest bytes: %s", string(manifestBytes))
 
-	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(signedBytes)
+	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(keyPath))
+	if err != nil {
+		return errors.Wrap(err, "error in reading private key")
+	}
+	doSigning := true
+	// if signing key is empty, do not sign the manifest and return here
+	if string(ecdsaPriv) == "" {
+		log.Warnf("signing key is empty, so skip signing the manifest")
+		doSigning = false
+	}
+	if doSigning {
+		signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
+		if err != nil {
+			log.Errorf("Error in signing manifest: %s", err.Error())
+			return err
+		}
+		manifestBytes = signedBytes
+	}
+	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(manifestBytes)
 
 	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
+	interlaceConfig, err := config.GetInterlaceConfig()
 
 	var annotations map[string]string
 	for _, item := range manifestYAMLs {
@@ -87,18 +111,22 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 		resourceLabels := obj.GetLabels()
 
 		log.Info("kind :", kind, " resourceName ", resourceName, " namespace", namespace)
-		interlaceConfig, err := config.GetInterlaceConfig()
 
 		isSignatureresource := false
 		log.Info("resourceLabels ", resourceLabels)
 
 		if rscLabel, ok := resourceLabels[interlaceConfig.SignatureResourceLabel]; ok {
-			isSignatureresource, _ = strconv.ParseBool(rscLabel)
+			isSignatureresource, err = strconv.ParseBool(rscLabel)
+			if err != nil {
+				log.Errorf("failed to parse label value `%s`; err: %s", rscLabel, err.Error())
+			}
+
 		}
-
 		log.Info("isSignatureresource :", isSignatureresource)
-
 		if isSignatureresource {
+			if namespace == "" {
+				namespace = s.appData.AppDestinationNamespace
+			}
 			log.Info("Patch kind:", kind, " name:", resourceName, " in namespace:", namespace)
 
 			annotations = k8smnfutil.GetAnnotationsInYAML(item)
@@ -106,8 +134,8 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 			message := "null"
 			signature := "null"
 			if sourceVerifed {
-				message = annotations[utils.MSG_ANNOTATION_NAME]
-				signature = annotations[utils.SIG_ANNOTATION_NAME]
+				message = annotations[config.MSG_ANNOTATION_NAME]
+				signature = annotations[config.SIG_ANNOTATION_NAME]
 			}
 
 			patchData, err := preparePatch(message, signature, kind)
@@ -120,7 +148,8 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
-			err = utils.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
+			err = argoutil.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
+			// err = argoutil.PatchResource(interlaceConfig.ArgocdApiBaseUrl, s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
 
 			if err != nil {
 				log.Errorf("Error in patching application resource config: %s", err.Error())
@@ -138,64 +167,76 @@ func (s *StorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	return nil
 }
 
-func preparePatch(message, signature, kind string) ([]string, error) {
+func preparePatch(message, signature, kind string) ([]byte, error) {
 
-	var patchData []string
+	patchData := map[string]interface{}{}
+	patchDataSub := map[string]interface{}{}
 	if kind == "ConfigMap" {
-
-		patchSig := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
-			"data", "signature", signature)
-		patchData = append(patchData, patchSig)
-		patchMsg := fmt.Sprintf("{\"%s\": {\"%s\": \"%s\"}}",
-			"data", "message", message)
-		patchData = append(patchData, patchMsg)
+		if message != "" {
+			patchDataSub["message"] = message
+		}
+		if signature != "" {
+			patchDataSub["signature"] = signature
+		}
+		patchData["data"] = patchDataSub
 	} else {
-		sigAnnot := utils.SIG_ANNOTATION_NAME
-		patchSig := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-			"metadata", "annotations", sigAnnot, signature)
-		patchData = append(patchData, patchSig)
-
-		msgAnnot := utils.MSG_ANNOTATION_NAME
-		patchMsg := fmt.Sprintf("{\"%s\": { \"%s\" : {\"%s\": \"%s\"}}}",
-			"metadata", "annotations", msgAnnot, message)
-
-		patchData = append(patchData, patchMsg)
+		msgAnnot := config.MSG_ANNOTATION_NAME
+		if message != "" {
+			patchDataSub[msgAnnot] = message
+		}
+		sigAnnot := config.SIG_ANNOTATION_NAME
+		if signature != "" {
+			patchDataSub[sigAnnot] = signature
+		}
+		patchData["metadata"] = map[string]interface{}{
+			"annotations": patchDataSub,
+		}
 	}
-
-	return patchData, nil
+	return json.Marshal(patchData)
 }
 
-func (s *StorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time) error {
-	manifestPath := filepath.Join(s.appData.AppDirPath, utils.MANIFEST_FILE_NAME)
+func (s *AnnotationStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool) error {
+	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
+	if err != nil {
+		return errors.Wrap(err, "error when computing hash values of source repo contents")
+	}
 
-	var prov provenance.Provenance
+	var provMgr provenance.ProvenanceManager
 	if s.appData.IsHelm {
-		prov, _ = helmprov.NewProvenance(s.appData)
-		err = prov.GenerateProvanance(manifestPath, computedFileHash, true, buildStartedOn, buildFinishedOn)
+		provMgr, _ = helmprov.NewProvenanceManager(s.appData)
+		err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
 
 		if err != nil {
 			log.Errorf("Error in storing provenance: %s", err.Error())
 			return err
 		}
 	} else {
-		prov, _ = kustprov.NewProvenance(s.appData)
-		err = prov.GenerateProvanance(manifestPath, computedFileHash, true, buildStartedOn, buildFinishedOn)
+		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
+		err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
 
 		if err != nil {
 			log.Errorf("Error in storing provenance: %s", err.Error())
 			return err
 		}
 	}
-	s.Provenance = prov
+	s.provMgr = provMgr
 
 	return nil
 }
 
-func (b *StorageBackend) GetProvenance() provenance.Provenance {
-	return b.Provenance
+func (b *AnnotationStorageBackend) UploadTLogEnabled() bool {
+	return b.uploadTLog
 }
 
-func (b *StorageBackend) Type() string {
+func (b *AnnotationStorageBackend) GetDestinationString() string {
+	return "annotation"
+}
+
+func (b *AnnotationStorageBackend) GetProvenanceManager() provenance.ProvenanceManager {
+	return b.provMgr
+}
+
+func (b *AnnotationStorageBackend) Type() string {
 	return StorageBackendAnnotation
 }

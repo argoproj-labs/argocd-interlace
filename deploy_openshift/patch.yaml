@@ -1,0 +1,20 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_NAMESPACE"
+    value: "openshift-gitops"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_SERVER_SERVICE_NAME"
+    value: "openshift-gitops-server"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_USER_SECRET_NAME"
+    value: "openshift-gitops-cluster"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: "ARGOCD_USER_SECRET_PASSFIELD"
+    value: "admin.password"
