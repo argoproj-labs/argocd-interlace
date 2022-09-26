@@ -16,7 +16,7 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.2.0
+          image: ghcr.io/hirokuni-kitahara/argocd-interlace-controller:v0.1.0-13-g923a3dd-dirty
           imagePullPolicy: Always
           command:
             - argocd-interlace
@@ -50,15 +50,3 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-          volumeMounts:
-            - name: sign-key
-              mountPath: /etc/signkey
-            - name: verify-key
-              mountPath: /etc/verifykey
-      volumes:
-        - name: sign-key
-          secret:
-            secretName: interlace-signing-key
-        - name: verify-key
-          secret:
-            secretName: source-material-verify-key

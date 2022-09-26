@@ -32,8 +32,7 @@ import (
 const maxTrialGetAttestation = 3
 
 type ProvenanceManager interface {
-	GenerateProvenance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
-	VerifySourceMaterial() (bool, error)
+	GenerateProvenance(target, targatDigest string, privkeyBytes []byte, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
 	GetProvenance() in_toto.Statement
 	GetProvSignature() []byte
 }

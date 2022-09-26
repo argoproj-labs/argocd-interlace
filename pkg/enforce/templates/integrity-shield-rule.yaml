@@ -1,0 +1,23 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: ManifestIntegrityConstraint
+metadata:
+  name: "<RULE_NAME>" # deployment-constraint
+spec:
+  match:
+    kinds:
+      - apiGroups: ["<GROUP>"] # apps
+        kinds: ["<KIND>"] # Deployment 
+    namespaces: ["<NAMESPACE>"] # sample-ns
+  parameters:
+    constraintName: "<RULE_NAME>" # deployment-constraint
+    action:
+      mode: enforce
+    keyConfigs:
+      key:
+        PEM: "<PUBLIC_KEY>"
+    signatureRef:
+      signatureResourceRef:
+        name: "<SIG_NAME>"
+        namespace: "<SIG_NAMESPACE>"
+    objectSelector:
+    - name: "<NAME>" # sample-deployment

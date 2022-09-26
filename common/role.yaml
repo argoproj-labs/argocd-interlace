@@ -6,10 +6,10 @@ metadata:
 rules:
   # Read-only access to these.
   - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
-    verbs: ["get", "list", "watch"]
+    resources: ["applications", "applicationsets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
   - apiGroups: ["interlace.argocd.dev"]
-    resources: ["applicationprovenances"]
+    resources: ["interlaceprofiles", "applicationprovenances"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]

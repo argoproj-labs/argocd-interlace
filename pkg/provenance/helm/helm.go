@@ -49,7 +49,7 @@ func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceM
 	}, nil
 }
 
-func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appSourceRevision := p.appData.AppSourceRevision
 	appDirPath := p.appData.AppDirPath
@@ -103,7 +103,7 @@ func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, 
 		return err
 	}
 
-	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog)
 	if err != nil {
 		log.Errorf("Error in generating signed attestation:  %s", err.Error())
 		return err
@@ -147,51 +147,6 @@ func (p *HelmProvenanceManager) generateMaterial() []intotoprov02.ProvenanceMate
 		},
 	})
 	return materials
-}
-
-func (p *HelmProvenanceManager) VerifySourceMaterial() (bool, error) {
-
-	appPath := p.appData.AppPath
-	repoUrl := p.appData.AppSourceRepoUrl
-	chart := p.appData.Chart
-	targetRevision := p.appData.AppSourceRevision
-
-	mkDirCmd := "mkdir"
-	_, err := utils.CmdExec(mkDirCmd, "", appPath)
-	if err != nil {
-		log.Infof("mkdir returns error : %s ", err.Error())
-		return false, err
-	}
-	helmChartUrl := fmt.Sprintf("%s/%s-%s.tgz", repoUrl, chart, targetRevision)
-
-	chartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
-	curlCmd := "curl"
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartUrl, "--output", chartPath)
-	if err != nil {
-		log.Infof("Retrive Helm Chart : %s ", err.Error())
-		return false, err
-	}
-
-	helmChartProvUrl := fmt.Sprintf("%s/%s-%s.tgz.prov", repoUrl, chart, targetRevision)
-	provPath := fmt.Sprintf("%s/%s-%s.tgz.prov", appPath, chart, targetRevision)
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartProvUrl, "--output", provPath)
-	if err != nil {
-		log.Infof("Retrive Helm Chart Prov : %s ", err.Error())
-		return false, err
-	}
-
-	helmCmd := "helm"
-
-	_, err = utils.CmdExec(helmCmd, appPath, "sigstore", "verify", chartPath)
-	if err != nil {
-		log.Infof("Helm-sigstore verify : %s ", err.Error())
-		return false, err
-	}
-
-	log.Infof("[INFO]: Helm sigstore verify was successful for the  Helm chart: %s ", p.appData.Chart)
-
-	return true, nil
-
 }
 
 func (p *HelmProvenanceManager) GetProvenance() in_toto.Statement {

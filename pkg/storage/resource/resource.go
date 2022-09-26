@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	appprov "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
-	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/applicationprovenance/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/manifest"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
@@ -57,9 +58,8 @@ func (s *ResourceStorageBackend) GetLatestManifestContent() ([]byte, error) {
 	return nil, nil
 }
 
-func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
+func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool, privkeyBytes []byte) error {
 
-	keyPath := config.OutputSignKeyPath
 	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	signedManifestPath := filepath.Join(s.appData.AppDirPath, config.SIGNED_MANIFEST_FILE_NAME)
 
@@ -69,21 +69,29 @@ func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 	}
 	log.Debugf("manifest bytes: %s", string(manifestBytes))
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(keyPath))
-	if err != nil {
-		return errors.Wrap(err, "error in reading private key")
-	}
 	doSigning := true
 	// if signing key is empty, do not sign the manifest and return here
-	if string(ecdsaPriv) == "" {
+	if string(privkeyBytes) == "" {
 		log.Warnf("signing key is empty, so skip signing the manifest")
 		doSigning = false
 	}
+
 	if doSigning {
+		privkeyFile, err := ioutil.TempFile("", "privkey")
+		if err != nil {
+			return errors.Wrap(err, "error in creating a temp file")
+		}
+		defer os.Remove(privkeyFile.Name())
+
+		_, err = privkeyFile.Write(privkeyBytes)
+		if err != nil {
+			return errors.Wrap(err, "error in saving the signing key as a temp file")
+		}
+
+		keyPath := privkeyFile.Name()
 		signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 		if err != nil {
-			log.Errorf("Error in signing manifest: %s", err.Error())
-			return err
+			return errors.Wrap(err, "error in signing manifest")
 		}
 		manifestBytes = signedBytes
 	}
@@ -137,29 +145,24 @@ func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 			patchData, err := preparePatch(message, signature, kind)
 			if err != nil {
-				log.Errorf("Error in creating patch for application resource config: %s", err.Error())
-				return err
+				return errors.Wrap(err, "error in creating patch for application resource config")
 			}
 
 			log.Info("len(patchData)", len(patchData))
 
-			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
+			log.Infof("[%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
 			err = argoutil.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
 			// err = argoutil.PatchResource(interlaceConfig.ArgocdApiBaseUrl, s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
 
 			if err != nil {
-				log.Errorf("Error in patching application resource config: %s", err.Error())
-				return nil
+				return errors.Wrap(err, "error in patching application resource config")
 			}
-
 		}
-
 	}
 
 	if err != nil {
-		log.Errorf("Error in getting digest: %s ", err.Error())
-		return err
+		return errors.Wrap(err, "error in getting digest")
 	}
 	return nil
 }
@@ -192,7 +195,7 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 	return json.Marshal(patchData)
 }
 
-func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool) error {
+func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool, privkeyBytes []byte) error {
 	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	computedFileHash, err := utils.ComputeHash(manifestPath)
 	if err != nil {
@@ -205,7 +208,7 @@ func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Tim
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
 	}
-	err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	err = provMgr.GenerateProvenance(manifestPath, computedFileHash, privkeyBytes, s.uploadTLog, buildStartedOn, buildFinishedOn)
 	if err != nil {
 		log.Errorf("Error in generating provenance: %s", err.Error())
 		return err

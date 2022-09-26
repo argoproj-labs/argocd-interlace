@@ -18,6 +18,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -27,10 +28,15 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+const cosignPasswordEnvKey = "COSIGN_PASSWORD"
 
 //GetK8sClient returns a kubernetes client and config
 func GetK8sClient(configpath string) (*kubernetes.Clientset, *rest.Config, error) {
@@ -54,6 +60,20 @@ func GetK8sClient(configpath string) (*kubernetes.Clientset, *rest.Config, error
 	}
 	clientset, _ := kubernetes.NewForConfig(config)
 	return clientset, config, nil
+}
+
+func GetSecret(kubeConfig *rest.Config, namespace, name string) (*corev1.Secret, error) {
+
+	coreV1Client, err := clientcorev1.NewForConfig(kubeConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to init core v1 client to get secret")
+	}
+	secret, err := coreV1Client.Secrets(namespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get secret")
+	}
+	return secret, nil
+
 }
 
 func WriteToFile(str, dirPath, filename string) error {
@@ -129,4 +149,8 @@ func CmdExec(baseCmd, dir string, args ...string) (string, error) {
 	}
 	out := stdout.String()
 	return out, nil
+}
+
+func GetCosignPassword() string {
+	return os.Getenv(cosignPasswordEnvKey)
 }

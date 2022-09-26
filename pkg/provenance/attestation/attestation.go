@@ -57,7 +57,7 @@ var (
 	Read = readPasswordFn
 )
 
-func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, uploadTLog bool) ([]byte, *provenance.ProvenanceRef, error) {
+func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, privkeyBytes []byte, uploadTLog bool) ([]byte, *provenance.ProvenanceRef, error) {
 
 	b, err := json.Marshal(it)
 	if err != nil {
@@ -65,18 +65,13 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 		return nil, nil, err
 	}
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(config.OutputSignKeyPath))
-	if err != nil {
-		log.Errorf("Error in reading private key:  %s", err.Error())
-		return nil, nil, err
-	}
 	// if signing key is empty, do not sign the provenance and return here
-	if string(ecdsaPriv) == "" {
+	if string(privkeyBytes) == "" {
 		log.Warnf("signing key is empty, so skip signing the provenance")
 		return nil, nil, nil
 	}
 
-	pb, _ := pem.Decode(ecdsaPriv)
+	pb, _ := pem.Decode(privkeyBytes)
 
 	pwd := ""
 
@@ -230,11 +225,11 @@ func upload(it in_toto.Statement, attestationPath, appName, pubkeyPath string) *
 
 	uuid, url := getUUIDFromUploadOutput(out)
 
-	log.Infof("[INFO][%s] Interlace generated provenance record of manifest build with uuid: %s, url: %s", appName, uuid, url)
+	log.Infof("[%s] Interlace generated provenance record of manifest build with uuid: %s, url: %s", appName, uuid, url)
 
-	log.Infof("[INFO][%s] Interlace stores attestation to provenance record to Rekor transparency log", appName)
+	log.Infof("[%s] Interlace stores attestation to provenance record to Rekor transparency log", appName)
 
-	log.Infof("[INFO][%s] %s", appName, out)
+	log.Infof("[%s] %s", appName, out)
 
 	if uuid != "" && url != "" {
 		return &provenance.ProvenanceRef{UUID: uuid, URL: url}

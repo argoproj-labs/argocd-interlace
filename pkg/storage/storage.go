@@ -19,22 +19,28 @@ package storage
 import (
 	"time"
 
+	iprof "github.com/argoproj-labs/argocd-interlace/pkg/apis/interlaceprofile/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
-	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/applicationprovenance/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
+	"github.com/argoproj-labs/argocd-interlace/pkg/storage/repository"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/resource"
+	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
+	"github.com/pkg/errors"
+	"k8s.io/client-go/rest"
 )
 
 var configuredStorageBackends = []string{
 	annotation.StorageBackendAnnotation,
 	resource.StorageBackendResource,
+	repository.StorageBackendRepository,
 }
 
 type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
-	StoreManifestBundle(sourceVerifed bool) error
-	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerifed bool) error
+	StoreManifestBundle(sourceVerifed bool, privkeyBytes []byte) error
+	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerifed bool, privkeyBytes []byte) error
 	GetProvenanceManager() provenance.ProvenanceManager
 	UploadTLogEnabled() bool // TODO: TLog should be an independent storageBackend instead of common configuration
 	GetDestinationString() string
@@ -45,6 +51,7 @@ type StorageConfig struct {
 	// common settings
 	ManifestStorageType string
 	AppData             application.ApplicationData
+	Profile             *iprof.InterlaceProfile
 
 	// resource storage
 	AppProvClientset     appprovClientset.Interface
@@ -59,7 +66,7 @@ type StorageConfig struct {
 	UploadTLog bool
 }
 
-func InitializeStorageBackends(c StorageConfig) (map[string]StorageBackend, error) {
+func InitializeStorageBackends(c StorageConfig, kubeConfig *rest.Config) (map[string]StorageBackend, error) {
 	storageBackends := map[string]StorageBackend{}
 	for _, backendType := range configuredStorageBackends {
 		if c.ManifestStorageType == backendType {
@@ -71,11 +78,29 @@ func InitializeStorageBackends(c StorageConfig) (map[string]StorageBackend, erro
 				}
 				storageBackends[backendType] = annotationStorageBackend
 			case resource.StorageBackendResource:
-				annotationStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog)
+				resourceStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog)
 				if err != nil {
 					return nil, err
 				}
-				storageBackends[backendType] = annotationStorageBackend
+				storageBackends[backendType] = resourceStorageBackend
+			case repository.StorageBackendRepository:
+				srcConf := c.Profile.Spec.Protection.PolicySource
+				gitSecretName := c.Profile.Spec.Protection.PolicySource.AuthSecret
+				secret, err := utils.GetSecret(kubeConfig, c.InterlaceNS, gitSecretName)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to get secret")
+				}
+				user := secret.Data["user"]
+				token := secret.Data["token"]
+				email := secret.Data["email"]
+				gitUser := string(user)
+				gitToken := string(token)
+				gitEmail := string(email)
+				repositoryStorageBackend, err := repository.NewStorageBackend(c.AppData, c.AppProvClientset, srcConf, gitUser, gitToken, gitEmail, c.MaxResultsInResource, c.UploadTLog)
+				if err != nil {
+					return nil, err
+				}
+				storageBackends[backendType] = repositoryStorageBackend
 			}
 		}
 	}

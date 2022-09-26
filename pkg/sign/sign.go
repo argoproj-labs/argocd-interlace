@@ -24,7 +24,6 @@ import (
 func SignManifest(keyPath, manifestPath, signedManifestPath string) ([]byte, error) {
 
 	so := &k8smanifest.SignOption{
-		ImageRef:         "",
 		KeyPath:          keyPath,
 		Output:           signedManifestPath,
 		UpdateAnnotation: true,
