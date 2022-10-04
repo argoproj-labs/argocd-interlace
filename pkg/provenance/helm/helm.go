@@ -29,7 +29,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
-	log "github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
 )
 
 type HelmProvenanceManager struct {
@@ -50,16 +50,17 @@ func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceM
 }
 
 func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
-	appName := p.appData.AppName
-	appSourceRevision := p.appData.AppSourceRevision
+	appName := p.appData.AppNamespace
 	appDirPath := p.appData.AppDirPath
-	chart := p.appData.Chart
 
-	entryPoint := "helm"
-	helmChart := fmt.Sprintf("%s-%s.tgz", chart, appSourceRevision)
+	entryPoint := "argocd-interlace"
+	applicationBytes, err := json.Marshal(p.appData.Object)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal Application data")
+	}
 	invocation := intotoprov02.ProvenanceInvocation{
 		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
-		Parameters:   []string{"install", chart, helmChart},
+		Parameters:   map[string]string{"applicationSnapshot": string(applicationBytes)},
 	}
 
 	subjects := []in_toto.Subject{}
@@ -93,20 +94,17 @@ func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, 
 	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
-		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to marshal attestation data")
 	}
 
 	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
-		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to write the provenance to file")
 	}
 
 	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog)
 	if err != nil {
-		log.Errorf("Error in generating signed attestation:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to sign the attestation")
 	}
 	if provSig != nil {
 		p.sig = provSig

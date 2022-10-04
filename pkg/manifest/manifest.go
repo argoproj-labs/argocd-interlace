@@ -23,10 +23,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	iprof "github.com/argoproj-labs/argocd-interlace/pkg/apis/interlaceprofile/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils/argoutil"
+	gyaml "github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/util/mapnode"
 	log "github.com/sirupsen/logrus"
@@ -105,6 +108,32 @@ func GenerateManifest(appData application.ApplicationData, yamlBytes []byte) (bo
 	}
 
 	return false, nil
+}
+
+func PickUpResourcesFromManifest(appData application.ApplicationData, matchConditions []iprof.ResourceMatchPattern) ([]byte, error) {
+	manifestBytes, err := GetManifest(appData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get the generated manifest")
+	}
+	if len(matchConditions) == 0 {
+		return manifestBytes, nil
+	}
+	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(manifestBytes)
+	matchedYAMLs := [][]byte{}
+	for _, yaml := range manifestYAMLs {
+		var obj *unstructured.Unstructured
+		err = gyaml.Unmarshal(yaml, &obj)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal the generated manifest into *unstructured.Unstructured")
+		}
+		for _, matchCondition := range matchConditions {
+			if matchCondition.Match(obj) {
+				matchedYAMLs = append(matchedYAMLs, yaml)
+			}
+		}
+	}
+	pickedYAMLs := k8smnfutil.ConcatenateYAMLs(matchedYAMLs)
+	return pickedYAMLs, nil
 }
 
 func GetManifest(appData application.ApplicationData) ([]byte, error) {

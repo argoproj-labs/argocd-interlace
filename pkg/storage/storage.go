@@ -24,22 +24,20 @@ import (
 	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/applicationprovenance/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/annotation"
-	"github.com/argoproj-labs/argocd-interlace/pkg/storage/repository"
+	"github.com/argoproj-labs/argocd-interlace/pkg/storage/oci"
 	"github.com/argoproj-labs/argocd-interlace/pkg/storage/resource"
-	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
-	"github.com/pkg/errors"
 	"k8s.io/client-go/rest"
 )
 
 var configuredStorageBackends = []string{
 	annotation.StorageBackendAnnotation,
 	resource.StorageBackendResource,
-	repository.StorageBackendRepository,
+	oci.StorageBackendOCI,
 }
 
 type StorageBackend interface {
 	GetLatestManifestContent() ([]byte, error)
-	StoreManifestBundle(sourceVerifed bool, privkeyBytes []byte) error
+	StoreManifestBundle(sourceVerifed bool, manifestBytes, privkeyBytes []byte) error
 	StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerifed bool, privkeyBytes []byte) error
 	GetProvenanceManager() provenance.ProvenanceManager
 	UploadTLogEnabled() bool // TODO: TLog should be an independent storageBackend instead of common configuration
@@ -64,6 +62,11 @@ type StorageConfig struct {
 	APIPassword string
 
 	UploadTLog bool
+
+	// manifest image
+	ManifestImage         string
+	RegistrySecret        string
+	AllowInsecureRegistry bool
 }
 
 func InitializeStorageBackends(c StorageConfig, kubeConfig *rest.Config) (map[string]StorageBackend, error) {
@@ -72,35 +75,23 @@ func InitializeStorageBackends(c StorageConfig, kubeConfig *rest.Config) (map[st
 		if c.ManifestStorageType == backendType {
 			switch backendType {
 			case annotation.StorageBackendAnnotation:
-				annotationStorageBackend, err := annotation.NewStorageBackend(c.AppData, c.UploadTLog)
+				annotationStorageBackend, err := annotation.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}
 				storageBackends[backendType] = annotationStorageBackend
 			case resource.StorageBackendResource:
-				resourceStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog)
+				resourceStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}
 				storageBackends[backendType] = resourceStorageBackend
-			case repository.StorageBackendRepository:
-				srcConf := c.Profile.Spec.Protection.PolicySource
-				gitSecretName := c.Profile.Spec.Protection.PolicySource.AuthSecret
-				secret, err := utils.GetSecret(kubeConfig, c.InterlaceNS, gitSecretName)
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to get secret")
-				}
-				user := secret.Data["user"]
-				token := secret.Data["token"]
-				email := secret.Data["email"]
-				gitUser := string(user)
-				gitToken := string(token)
-				gitEmail := string(email)
-				repositoryStorageBackend, err := repository.NewStorageBackend(c.AppData, c.AppProvClientset, srcConf, gitUser, gitToken, gitEmail, c.MaxResultsInResource, c.UploadTLog)
+			case oci.StorageBackendOCI:
+				ociStorageBackend, err := oci.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}
-				storageBackends[backendType] = repositoryStorageBackend
+				storageBackends[backendType] = ociStorageBackend
 			}
 		}
 	}

@@ -16,13 +16,13 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: ghcr.io/hirokuni-kitahara/argocd-interlace-controller:v0.1.0-13-g923a3dd-dirty
+          image: ghcr.io/hirokuni-kitahara/argocd-interlace-controller:v0.1.0-14-ga8ffa8f-dirty
           imagePullPolicy: Always
           command:
             - argocd-interlace
           env:
             - name: MANIFEST_STORAGE_TYPE
-              value: resource
+              value: oci
             - name: REKOR_SERVER
               value: https://rekor.sigstore.dev
             - name: SOURCE_MATERIAL_SIGNATURE

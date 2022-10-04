@@ -5,25 +5,28 @@ go 1.16
 require (
 	github.com/ProtonMail/go-crypto v0.0.0-20210707164159-52430bf6b52c
 	github.com/argoproj/argo-cd/v2 v2.4.12
+	github.com/docker/cli v20.10.17+incompatible
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
+	github.com/google/go-containerregistry v0.11.0
 	github.com/in-toto/in-toto-golang v0.3.4-0.20220709202702-fa494aaa0add
-	github.com/jinzhu/copier v0.3.2
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0
-	github.com/sigstore/cosign v1.10.1
-	github.com/sigstore/k8s-manifest-sigstore v0.4.0
+	github.com/sigstore/cosign v1.12.1
+	github.com/sigstore/fulcio v0.5.3
+	github.com/sigstore/k8s-manifest-sigstore v0.4.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.5.0
-	github.com/theupdateframework/go-tuf v0.3.0
+	github.com/theupdateframework/go-tuf v0.5.0
 	github.com/tidwall/gjson v1.9.3
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.25.0-alpha.2
-	k8s.io/apiextensions-apiserver v0.23.1
 	k8s.io/apimachinery v0.25.0-alpha.2
 	k8s.io/client-go v0.25.0-alpha.2
+	sigs.k8s.io/kustomize/api v0.10.1
+	sigs.k8s.io/kustomize/kyaml v0.13.0
 )
 
 replace github.com/argoproj-labs/argocd-interlace => ./

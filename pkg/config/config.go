@@ -29,6 +29,8 @@ const (
 	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
 	CRT_ANNOTATION_NAME       = "cosign.sigstore.dev/certificate"
 	BDL_ANNOTATION_NAME       = "cosign.sigstore.dev/bundle"
+
+	APP_MANIFEST_IMAGE_ANNOTATION_NAME = "interlace.argocd.dev/manifestImage"
 )
 
 type InterlaceConfig struct {

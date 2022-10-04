@@ -19,7 +19,11 @@ package v1beta1
 import (
 	"strings"
 
+	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ApplicationAction string
@@ -69,20 +73,15 @@ type InterlaceProfile struct {
 
 // InterlaceProfileSpec is the spec for a InterlaceProfile resource
 type InterlaceProfileSpec struct {
-	Applications []ApplicationConfig `json:"applications,omitempty"`
-	Protection   ProtectionConfig    `json:"protection,omitempty"`
+	ApplicationSelector []ApplicationSelector `json:"applicationSelector,omitempty"`
+	VerifyConfig        VerifyConfig          `json:"verifyConfig,omitempty"`
+	SignConfig          SignConfig            `json:"signConfig,omitempty"`
+	ProvenanceConfig    ProvenanceConfig      `json:"provenanceConfig,omitempty"`
 }
 
-type ApplicationConfig struct {
-	Selector         ApplictionSelector  `json:"selector,omitempty"`
-	Actions          []ApplicationAction `json:"actions,omitempty"`
-	VerifyConfig     VerifyConfig        `json:"verifyConfig,omitempty"`
-	SignConfig       SignConfig          `json:"signConfig,omitempty"`
-	ProvenanceConfig ProvenanceConfig    `json:"provenanceConfig,omitempty"`
-}
-
-type ApplictionSelector struct {
-	Name string `json:"name,omitempty"`
+type ApplicationSelector struct {
+	Name  string                `json:"name,omitempty"`
+	Label *metav1.LabelSelector `json:"label,omitempty"`
 }
 
 type VerifyConfig struct {
@@ -90,9 +89,14 @@ type VerifyConfig struct {
 }
 
 type SignConfig struct {
-	KeyConfig   KeyConfig              `json:"key,omitempty"`
-	Match       []ResourceMatchPattern `json:"match,omitempty"`
-	StorageType StorageType            `json:"storageType,omitempty"`
+	KeyConfig      KeyConfig              `json:"key,omitempty"`
+	RegistryConfig RegistryConfig         `json:"registry,omitempty"`
+	Match          []ResourceMatchPattern `json:"match,omitempty"`
+}
+
+type RegistryConfig struct {
+	Secret           string `json:"secret,omitempty"`
+	InsecureRegistry bool   `json:"insecureRegistry,omitempty"`
 }
 
 type ProvenanceConfig struct {
@@ -107,33 +111,40 @@ type ResourceMatchPattern struct {
 	Kind      string `json:"kind,omitempty"`
 }
 
+func (p ResourceMatchPattern) Match(obj *unstructured.Unstructured) bool {
+	if p.Namespace != "" {
+		if !match(p.Namespace, obj.GetNamespace()) {
+			return false
+		}
+	}
+	if p.Name != "" {
+		if !match(p.Name, obj.GetName()) {
+			return false
+		}
+	}
+	apiVersion := obj.GetAPIVersion()
+	gv, _ := schema.ParseGroupVersion(apiVersion)
+	if p.Group != "" {
+		if !match(p.Group, gv.Group) {
+			return false
+		}
+	}
+	if p.Version != "" {
+		if !match(p.Version, gv.Version) {
+			return false
+		}
+	}
+	if p.Kind != "" {
+		if !match(p.Kind, obj.GetKind()) {
+			return false
+		}
+	}
+	return true
+}
+
 type KeyConfig struct {
 	Secret string `json:"secret,omitempty"`
 	PEM    string `json:"PEM,omitempty"`
-}
-
-type Generator interface {
-	DeepCopyGenerator() Generator
-}
-
-type Destination struct {
-	Server    string `json:"server,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-}
-
-type ProtectionConfig struct {
-	Generators   []Generator                  `json:"generators,omitempty"`
-	Destination  Destination                  `json:"destination,omitempty"`
-	PolicyType   ProtectionPolicyType         `json:"policyType,omitempty"`
-	PolicySource ProtectionPolicySourceConfig `json:"policySource,omitempty"`
-}
-
-type ProtectionPolicySourceConfig struct {
-	Type       ProtectionPolicySourceType `json:"type,omitempty"`
-	URL        string                     `json:"url,omitempty"`
-	Branch     string                     `json:"branch,omitempty"`
-	Path       string                     `json:"path,omitempty"`
-	AuthSecret string                     `json:"authSecret,omitempty"`
 }
 
 // InterlaceProfileStatus is the status for a InterlaceProfile resource
@@ -150,17 +161,35 @@ type InterlaceProfileList struct {
 	Items []InterlaceProfile `json:"items"`
 }
 
-func (p *InterlaceProfile) Match(name string) bool {
-	for _, appCfg := range p.Spec.Applications {
-		if appCfg.Match(name) {
+func (p *InterlaceProfile) Match(app *appv1.Application) bool {
+	if len(p.Spec.ApplicationSelector) == 0 {
+		return true
+	}
+	for _, selector := range p.Spec.ApplicationSelector {
+		if selector.Match(app) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c ApplicationConfig) Match(name string) bool {
-	return match(c.Selector.Name, name)
+func (s ApplicationSelector) Match(app *appv1.Application) bool {
+	if s.Name != "" {
+		if !match(s.Name, app.GetName()) {
+			return false
+		}
+	}
+	if s.Label != nil {
+		selector, err := metav1.LabelSelectorAsSelector(s.Label)
+		if err != nil {
+			return false
+		}
+		if !selector.Matches(labels.Set(app.GetLabels())) {
+			return false
+		}
+	}
+	// if selector is empty, matches all applications
+	return true
 }
 
 func match(pattern, value string) bool {

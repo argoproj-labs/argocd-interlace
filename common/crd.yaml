@@ -60,26 +60,28 @@ spec:
       storage: true
       schema:
         openAPIV3Schema:
-          type: object
           properties:
             spec:
-              type: object
               properties:
-                applications:
-                  type: array
+                applicationSelector:
                   items:
                     type: object
-                    properties:
-                      namespace:
-                        type: string
-                      name:
-                        type: string
-                actions:
+                    x-kubernetes-preserve-unknown-fields: true
+                  type: array
+                verifyConfig:
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
+                signConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                provenanceConfig:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+              type: object
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+          type: object
   # either Namespaced or Cluster
   scope: Namespaced
   names:
