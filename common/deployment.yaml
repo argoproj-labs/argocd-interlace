@@ -16,7 +16,7 @@ spec:
       serviceAccountName: argocd-interlace-controller
       containers:
         - name: argocd-interlace-controller
-          image: ghcr.io/hirokuni-kitahara/argocd-interlace-controller:v0.1.0-15-g91981ca-dirty
+          image: ghcr.io/argoproj-labs/argocd-interlace-controller:v0.3.0
           imagePullPolicy: Always
           command:
             - argocd-interlace
@@ -26,7 +26,7 @@ spec:
             - name: REKOR_SERVER
               value: https://rekor.sigstore.dev
             - name: UPLOAD_TLOG
-              value: "true"
+              value: "false"
             - name: SOURCE_MATERIAL_SIGNATURE
               value: "source-materials.sig"
             - name: SOURCE_MATERIAL_HASH_LIST
@@ -34,7 +34,7 @@ spec:
             - name: ALWAYS_GENERATE_PROV
               value: "true"
             - name: COSIGN_EXPERIMENTAL
-              value: "true"
+              value: "false"
             - name: COSIGN_PASSWORD
               value: ""
             - name: MANIFEST_ARGOCD_PROJECT
