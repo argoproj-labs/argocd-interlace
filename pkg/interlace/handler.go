@@ -252,6 +252,7 @@ func signManifestAndGenerateProvenance(appData application.ApplicationData, prof
 		InterlaceNS:           interlaceConfig.ArgocdInterlaceNamespace,
 		MaxResultsInResource:  interlaceConfig.MaxResultsInResource,
 		UploadTLog:            interlaceConfig.UploadTLog,
+		RekorURL:              utils.GetRekorURL(profile.Spec.ProvenanceConfig.RekorURL),
 		ManifestImage:         manifestImage,
 		RegistrySecret:        profile.Spec.SignConfig.RegistryConfig.Secret,
 		AllowInsecureRegistry: profile.Spec.SignConfig.RegistryConfig.InsecureRegistry,

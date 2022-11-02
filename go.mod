@@ -13,12 +13,13 @@ require (
 	github.com/in-toto/in-toto-golang v0.3.4-0.20220709202702-fa494aaa0add
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0
-	github.com/sigstore/cosign v1.12.1
-	github.com/sigstore/fulcio v0.5.3
-	github.com/sigstore/k8s-manifest-sigstore v0.4.1
+	github.com/sigstore/cosign v1.13.0
+	github.com/sigstore/fulcio v0.6.0
+	github.com/sigstore/k8s-manifest-sigstore v0.4.2
+	github.com/sigstore/rekor v0.12.1-0.20220915152154-4bb6f441c1b2
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.5.0
-	github.com/theupdateframework/go-tuf v0.5.0
+	github.com/theupdateframework/go-tuf v0.5.1-0.20220920170306-f237d7ca5b42
 	github.com/tidwall/gjson v1.9.3
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
 	gopkg.in/yaml.v2 v2.4.0

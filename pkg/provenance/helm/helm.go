@@ -49,7 +49,7 @@ func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceM
 	}, nil
 }
 
-func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, rekorURL string, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppNamespace
 	appDirPath := p.appData.AppDirPath
 
@@ -102,7 +102,7 @@ func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, 
 		return errors.Wrap(err, "failed to write the provenance to file")
 	}
 
-	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog, rekorURL)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign the attestation")
 	}

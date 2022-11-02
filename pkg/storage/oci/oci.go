@@ -47,17 +47,19 @@ type OCIStorageBackend struct {
 
 	interlaceNS           string
 	uploadTLog            bool
+	rekorURL              string
 	manifestImage         string
 	registrySecret        string
 	allowInsecureRegistry bool
 	kubeConfig            *rest.Config
 }
 
-func NewStorageBackend(appData application.ApplicationData, interlaceNS string, uploadTLog bool, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*OCIStorageBackend, error) {
+func NewStorageBackend(appData application.ApplicationData, interlaceNS string, uploadTLog bool, rekorURL, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*OCIStorageBackend, error) {
 	return &OCIStorageBackend{
 		appData:               appData,
 		interlaceNS:           interlaceNS,
 		uploadTLog:            uploadTLog,
+		rekorURL:              rekorURL,
 		manifestImage:         manifestImage,
 		registrySecret:        registrySecret,
 		allowInsecureRegistry: allowInsecureRegistry,
@@ -70,22 +72,20 @@ func (s *OCIStorageBackend) GetLatestManifestContent() ([]byte, error) {
 }
 
 func (s *OCIStorageBackend) StoreManifestBundle(sourceVerifed bool, manifestBytes, privkeyBytes []byte) error {
+	log.Debugf("manifest bytes: %s", string(manifestBytes))
+	dir, err := os.MkdirTemp("", "manifest-bundle")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	err = os.WriteFile(manifestPath, manifestBytes, 0644)
+	if err != nil {
+		return err
+	}
 
 	signedManifestPath := filepath.Join(s.appData.AppDirPath, config.SIGNED_MANIFEST_FILE_NAME)
-
-	log.Debugf("manifest bytes: %s", string(manifestBytes))
-
-	manifestFile, err := ioutil.TempFile("", "manifest.yaml")
-	if err != nil {
-		return errors.Wrap(err, "error in creating a temp manifest file")
-	}
-	defer os.Remove(manifestFile.Name())
-
-	_, err = manifestFile.Write(manifestBytes)
-	if err != nil {
-		return errors.Wrap(err, "error in saving the manifest as a temp file")
-	}
-	manifestPath := manifestFile.Name()
 
 	doSigning := true
 	// if signing key is empty, do not sign the manifest and return here
@@ -111,8 +111,9 @@ func (s *OCIStorageBackend) StoreManifestBundle(sourceVerifed bool, manifestByte
 		if err != nil {
 			return errors.Wrap(err, "error in signing manifest")
 		}
-		manifestBytes = signedBytes
+		log.Info("[DEBUG] signedBytes: ", string(signedBytes))
 	}
+	log.Info("[DEBUG] manifestBytes before split: ", string(manifestBytes))
 	manifestYAMLs := k8smnfutil.SplitConcatYAMLs(manifestBytes)
 
 	log.Info("len(manifestYAMLs): ", len(manifestYAMLs))
@@ -157,7 +158,7 @@ func (s *OCIStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, bu
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
 	}
-	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, s.rekorURL, buildStartedOn, buildFinishedOn)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate provenance data")
 	}
@@ -166,8 +167,6 @@ func (s *OCIStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, bu
 	prov := provMgr.GetProvenance()
 	provBytes, _ := json.Marshal(prov)
 	log.Infof("[DEBUG] provenance: %s", string(provBytes))
-
-	log.Info("OCIStorageBackend.StoreManifestProvenance() does nothing currently")
 	return nil
 }
 

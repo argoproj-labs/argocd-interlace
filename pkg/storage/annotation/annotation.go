@@ -50,17 +50,19 @@ type AnnotationStorageBackend struct {
 
 	interlaceNS           string
 	uploadTLog            bool
+	rekorURL              string
 	manifestImage         string
 	registrySecret        string
 	allowInsecureRegistry bool
 	kubeConfig            *rest.Config
 }
 
-func NewStorageBackend(appData application.ApplicationData, interlaceNS string, uploadTLog bool, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*AnnotationStorageBackend, error) {
+func NewStorageBackend(appData application.ApplicationData, interlaceNS string, uploadTLog bool, rekorURL string, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*AnnotationStorageBackend, error) {
 	return &AnnotationStorageBackend{
 		appData:               appData,
 		interlaceNS:           interlaceNS,
 		uploadTLog:            uploadTLog,
+		rekorURL:              rekorURL,
 		manifestImage:         manifestImage,
 		registrySecret:        registrySecret,
 		allowInsecureRegistry: allowInsecureRegistry,
@@ -254,7 +256,7 @@ func (s *AnnotationStorageBackend) StoreManifestProvenance(buildStartedOn time.T
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
 	}
-	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, s.rekorURL, buildStartedOn, buildFinishedOn)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate provenance data")
 	}

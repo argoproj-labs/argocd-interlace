@@ -49,13 +49,12 @@ import (
 )
 
 const (
-	rekorServerEnvKey               = "REKOR_SERVER"
-	defaultRekorServerURL           = "https://rekor.sigstore.dev"
-	defaultOIDCIssuer               = "https://oauth2.sigstore.dev/auth"
-	defaultOIDCClientID             = "sigstore"
-	cosignPasswordEnvKey            = "COSIGN_PASSWORD"
-	defaultTlogUploadTimeout        = 10
-	defaultKeylessTlogUploadTimeout = 90 // set to 90s for keyless as cosign recommends it in the help message
+	rekorServerEnvKey        = "REKOR_SERVER"
+	defaultRekorServerURL    = "https://rekor.sigstore.dev"
+	defaultOIDCIssuer        = "https://oauth2.sigstore.dev/auth"
+	defaultOIDCClientID      = "sigstore"
+	cosignPasswordEnvKey     = "COSIGN_PASSWORD"
+	defaultTlogUploadTimeout = 90 // set to 90s for keyless as cosign recommends it in the help message
 )
 
 //GetK8sClient returns a kubernetes client and config
@@ -151,7 +150,7 @@ func UploadManifestImage(manifest []byte, imageRef string, allowInsecureRegistry
 	if secretKc != nil {
 		remoteOptions = append(remoteOptions, remote.WithAuthFromKeychain(secretKc))
 	}
-	_, err = cremote.UploadFiles(ref, files, mediaTypeGetter, remoteOptions...)
+	_, err = cremote.UploadFiles(ref, files, nil, mediaTypeGetter, remoteOptions...)
 	if err != nil {
 		return err
 	}
@@ -199,10 +198,11 @@ func SignImage(imageRef string, privKey []byte, rekorURL string, uploadTlog bool
 		regOpt.Keychain = secretKc
 	}
 
+	force := true // skip confirmations/validations to automate signing
 	outputSignaturePath := ""
 	outputCertificatePath := ""
 	noTlogUpload := !(uploadTlog)
-	return clisign.SignCmd(rootOpt, opt, regOpt, nil, []string{imageRef}, "", "", true, outputSignaturePath, outputCertificatePath, "", false, false, "", noTlogUpload)
+	return clisign.SignCmd(rootOpt, opt, regOpt, nil, []string{imageRef}, "", "", true, outputSignaturePath, outputCertificatePath, "", force, false, "", noTlogUpload)
 }
 
 func GetImageHash(imageRef string) (string, error) {
@@ -325,4 +325,12 @@ func (kc *SecretKeyChain) Resolve(target authn.Resource) (authn.Authenticator, e
 		IdentityToken: cfg.IdentityToken,
 		RegistryToken: cfg.RegistryToken,
 	}), nil
+}
+
+func GetRekorURL(url string) string {
+	if url != "" {
+		return url
+	}
+	defaultRekorServerURL := "https://rekor.sigstore.dev"
+	return defaultRekorServerURL
 }

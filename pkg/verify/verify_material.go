@@ -74,28 +74,36 @@ func VerifyKustomizeSourceMaterial(appPath, repoUrl string, pubkeyBytes []byte) 
 	srcMatPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialHashList)
 	srcMatSigPath := filepath.Join(baseDir, interlaceConfig.SourceMaterialSignature)
 
-	verification_target, err := os.Open(srcMatPath)
+	targetBytes, err := os.ReadFile(srcMatPath)
 	if err != nil {
-		log.Errorf("error when opening source material digest file:  %s", err.Error())
-		return false, err
+		return false, errors.Wrap(err, "failed to open source material digest file")
 	}
-	signature, err := os.Open(srcMatSigPath)
+	signatureBytes, err := os.ReadFile(srcMatSigPath)
 	if err != nil {
-		log.Errorf("error when opening source material signature file:  %s", err.Error())
-		return false, err
-	}
-	flag, _, _, _, _ := VerifySignature(keyPath, verification_target, signature)
-
-	hashCompareSuccess := false
-	if flag {
-		hashCompareSuccess, err = CompareHash(srcMatPath, baseDir)
-		if err != nil {
-			return hashCompareSuccess, err
-		}
-		return hashCompareSuccess, nil
+		return false, errors.Wrap(err, "failed to open source material signature file")
 	}
 
-	return flag, nil
+	hashCompareSuccess, err := CompareHash(srcMatPath, baseDir)
+	if err != nil {
+		return false, err
+	}
+	if !hashCompareSuccess {
+		return false, errors.New("hash comparison failed")
+	}
+
+	sigType := GetSignatureTypeFromPublicKey(&keyPath)
+
+	var sigVerified bool
+	if sigType == SigTypePGP {
+		sigVerified, _, _, _, err = VerifyGPGSignature(keyPath, targetBytes, signatureBytes)
+	} else if sigType == SigTypeCosign {
+		sigVerified, err = VerifyCosignSignature(keyPath, targetBytes, signatureBytes)
+	}
+	if err != nil {
+		return false, errors.Wrap(err, "failed to verify the signature")
+	}
+
+	return sigVerified, nil
 }
 
 func VerifyHelmSourceMaterial(appPath, repoUrl, chart, targetRevision string) (bool, error) {

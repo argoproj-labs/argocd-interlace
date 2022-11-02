@@ -17,6 +17,7 @@
 package attestation
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -26,26 +27,34 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
-	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
+	rekorapp "github.com/sigstore/rekor/cmd/rekor-cli/app"
+	"github.com/sigstore/rekor/pkg/client"
+	gen_client "github.com/sigstore/rekor/pkg/generated/client"
+	"github.com/sigstore/rekor/pkg/generated/client/entries"
+	"github.com/sigstore/rekor/pkg/generated/models"
+	"github.com/sigstore/rekor/pkg/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/theupdateframework/go-tuf/encrypted"
 	"golang.org/x/term"
 )
 
-type IntotoSigner struct {
-	priv *ecdsa.PrivateKey
-}
+const (
+	defaultAttestationType = "intoto:0.0.1"
+	defaultTimeountSeconds = 30
+)
 
 const (
 	cli              = "/usr/local/bin/rekor-cli"
@@ -57,17 +66,16 @@ var (
 	Read = readPasswordFn
 )
 
-func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, privkeyBytes []byte, uploadTLog bool) ([]byte, *provenance.ProvenanceRef, error) {
+func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string, privkeyBytes []byte, uploadTLog bool, rekorURL string) ([]byte, *provenance.ProvenanceRef, error) {
 
 	b, err := json.Marshal(it)
 	if err != nil {
-		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to marshal attestation")
 	}
 
 	// if signing key is empty, do not sign the provenance and return here
 	if string(privkeyBytes) == "" {
-		log.Warnf("signing key is empty, so skip signing the provenance")
+		log.Warnf("signing key is empty, so skip signing the provenance & skip uploading the attestation")
 		return nil, nil, nil
 	}
 
@@ -78,14 +86,12 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	x509Encoded, err := encrypted.Decrypt(pb.Bytes, []byte(pwd))
 
 	if err != nil {
-		log.Errorf("Error in dycrypting private key: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to decrypt private key")
 	}
 	priv, err := x509.ParsePKCS8PrivateKey(x509Encoded)
 
 	if err != nil {
-		log.Errorf("Error in parsing private key: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to parse the private key")
 	}
 
 	intotoSigner := &IntotoSigner{
@@ -93,14 +99,12 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	}
 	signer, err := dsse.NewEnvelopeSigner(intotoSigner)
 	if err != nil {
-		log.Errorf("Error in creating new signer: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to create new signer object for attestation")
 	}
 
 	env, err := signer.SignPayload("application/vnd.in-toto+json", b)
 	if err != nil {
-		log.Errorf("Error in signing payload: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to sign the attestation payload")
 	}
 
 	var provSig []byte
@@ -111,37 +115,29 @@ func GenerateSignedAttestation(it in_toto.Statement, appName, appDirPath string,
 	// Now verify
 	_, err = signer.Verify(env)
 	if err != nil {
-		log.Errorf("Error in verifying env: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to verify the attestation after signing")
 	}
 
-	eb, err := json.Marshal(env)
+	attestationBytes, err := json.Marshal(env)
 	if err != nil {
-		log.Errorf("Error in marshaling env: %s", err.Error())
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "failed to marshal the attestation envelope")
 	}
 
-	log.Debug("attestation.json", string(eb))
-
-	err = utils.WriteToFile(string(eb), appDirPath, config.ATTESTATION_FILE_NAME)
-	if err != nil {
-		log.Errorf("Error in writing attestation to a file: %s", err.Error())
-		return nil, nil, err
-	}
-
-	attestationPath := filepath.Join(appDirPath, config.ATTESTATION_FILE_NAME)
+	log.Debug("attestation.json", string(attestationBytes))
 
 	var provRef *provenance.ProvenanceRef
 	if uploadTLog {
 		// public key file is required to upload the attestation
 		pub := intotoSigner.Public()
-		pubkeyPath, err := savePubkeyAsTemporaryFile(pub)
+		pubkeyBytes, err := getPublicKeyBytes(pub)
 		if err != nil {
-			log.Errorf("Error in saving public key: %s", err.Error())
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "failed to get public key bytes")
 		}
-		defer os.Remove(pubkeyPath)
-		provRef = upload(it, attestationPath, appName, pubkeyPath)
+		log.Infof("[DEBUG] public key: %s", string(pubkeyBytes))
+		provRef, err = upload(rekorURL, attestationBytes, pubkeyBytes)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to upload the attestation to rekor")
+		}
 	}
 
 	return provSig, provRef, nil
@@ -191,6 +187,10 @@ func GetPass(confirm bool) ([]byte, error) {
 	return pw1, nil
 }
 
+type IntotoSigner struct {
+	priv *ecdsa.PrivateKey
+}
+
 func (it *IntotoSigner) Sign(data []byte) ([]byte, error) {
 	h := sha256.Sum256(data)
 	sig, err := it.priv.Sign(rand.Reader, h[:], crypto.SHA256)
@@ -210,16 +210,95 @@ func (it *IntotoSigner) Verify(data, sig []byte) error {
 }
 
 func (it *IntotoSigner) KeyID() (string, error) {
-	return "no-keyid", nil
+	return "", nil
 }
 
 func (it *IntotoSigner) Public() crypto.PublicKey {
 	return it.priv.Public()
 }
 
-func upload(it in_toto.Statement, attestationPath, appName, pubkeyPath string) *provenance.ProvenanceRef {
+func upload(rekorURL string, attestationBytes, pubkeyBytes []byte) (*provenance.ProvenanceRef, error) {
+	dir, err := os.MkdirTemp("", "attestation")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create temp directory")
+	}
+	defer os.RemoveAll(dir)
+
+	attestationPath := filepath.Join(dir, "attestation.json")
+	err = os.WriteFile(attestationPath, attestationBytes, 0644)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create temp attestation file")
+	}
+
+	pubkeyPath := filepath.Join(dir, "key.pub")
+	err = os.WriteFile(pubkeyPath, pubkeyBytes, 0644)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create temp public key file")
+	}
+
+	rekorClient, err := client.GetRekorClient(rekorURL, client.WithUserAgent(rekorapp.UserAgent()))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get rekor client")
+	}
+	var entry models.ProposedEntry
+	typeStr, versionStr, err := rekorapp.ParseTypeFlag(defaultAttestationType)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse attestation type")
+	}
+	props := &types.ArtifactProperties{
+		ArtifactPath:   &url.URL{Path: attestationPath},
+		PublicKeyPaths: []*url.URL{{Path: pubkeyPath}},
+		PKIFormat:      "x509",
+	}
+	entry, err = types.NewProposedEntry(context.Background(), typeStr, versionStr, *props)
+	if err != nil {
+		return nil, fmt.Errorf("error: %w", err)
+	}
+	resp, err := tryUpload(rekorClient, entry)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to upload attestation entry")
+	}
+	var logEntry models.LogEntryAnon
+	for _, entry := range resp.Payload {
+		logEntry = entry
+	}
+	var uuid, url string
+	if logEntry.LogID != nil {
+		uuid = *logEntry.LogID
+		url = rekorURL + "/api/v1/log/entries/" + uuid
+	}
+	return &provenance.ProvenanceRef{UUID: uuid, URL: url}, nil
+}
+
+func tryUpload(rekorClient *gen_client.Rekor, entry models.ProposedEntry) (*entries.CreateLogEntryCreated, error) {
+	params := entries.NewCreateLogEntryParams()
+	params.SetTimeout(time.Second * defaultTimeountSeconds)
+	if pei, ok := entry.(types.ProposedEntryIterator); ok {
+		params.SetProposedEntry(pei.Get())
+	} else {
+		params.SetProposedEntry(entry)
+	}
+	resp, err := rekorClient.Entries.CreateLogEntry(params)
+	if err != nil {
+		if e, ok := err.(*entries.CreateLogEntryBadRequest); ok {
+			if pei, ok := entry.(types.ProposedEntryIterator); ok {
+				if pei.HasNext() {
+					log.Errorf("failed to upload entry: %v", e)
+					return tryUpload(rekorClient, pei.GetNext())
+				}
+			}
+		}
+		return nil, err
+	}
+	return resp, nil
+}
+
+func upload_cli(it in_toto.Statement, attestationPath, appName, pubkeyPath string) (*provenance.ProvenanceRef, error) {
 	// If we do it twice, it should already exist
-	out := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubkeyPath, "--pki-format", "x509")
+	out, err := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubkeyPath, "--pki-format", "x509")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to upload attestation to rekor")
+	}
 
 	outputContains(out, "Created entry at")
 
@@ -232,9 +311,9 @@ func upload(it in_toto.Statement, attestationPath, appName, pubkeyPath string) *
 	log.Infof("[%s] %s", appName, out)
 
 	if uuid != "" && url != "" {
-		return &provenance.ProvenanceRef{UUID: uuid, URL: url}
+		return &provenance.ProvenanceRef{UUID: uuid, URL: url}, nil
 	}
-	return nil
+	return nil, errors.New("unknown error while uploading attestation to rekor")
 }
 
 func outputContains(output, sub string) {
@@ -257,11 +336,10 @@ func getUUIDFromUploadOutput(out string) (string, string) {
 	return uuid, url
 }
 
-func runCli(arg ...string) string {
+func runCli(arg ...string) (string, error) {
 	interlaceConfig, err := config.GetInterlaceConfig()
 	if err != nil {
-		log.Errorf("Error in loading config: %s", err.Error())
-		return ""
+		return "", errors.Wrap(err, "failed to load interlace config")
 	}
 
 	rekorServer := interlaceConfig.RekorServer
@@ -277,11 +355,10 @@ func runCli(arg ...string) string {
 
 }
 
-func run(stdin, cmd string, arg ...string) string {
+func run(stdin, cmd string, arg ...string) (string, error) {
 	interlaceConfig, err := config.GetInterlaceConfig()
 	if err != nil {
-		log.Errorf("Error in loading config: %s", err.Error())
-		return ""
+		return "", errors.Wrap(err, "failed to load interlace config")
 	}
 	c := exec.Command(cmd, arg...)
 	if stdin != "" {
@@ -293,31 +370,20 @@ func run(stdin, cmd string, arg ...string) string {
 	}
 	b, err := c.CombinedOutput()
 	if err != nil {
-		log.Errorf("Error in executing CLI: %s", string(b))
+		return "", errors.Wrapf(err, "failed to execute command \"%s %s\"", cmd, strings.Join(arg, " "))
 	}
-	return string(b)
+	return string(b), nil
 }
 
-func savePubkeyAsTemporaryFile(pubkey crypto.PublicKey) (string, error) {
-	f, err := ioutil.TempFile("", "publickey")
-	if err != nil {
-		return "", err
-	}
+func getPublicKeyBytes(pubkey crypto.PublicKey) ([]byte, error) {
 	pubkeyPEM, err := x509.MarshalPKIXPublicKey(pubkey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	pemBlock := &pem.Block{
 		Type:  publicKeyPEMType,
 		Bytes: pubkeyPEM,
 	}
-	err = pem.Encode(f, pemBlock)
-	if err != nil {
-		return "", err
-	}
-	pubkeyPath, err := filepath.Abs(f.Name())
-	if err != nil {
-		return "", err
-	}
-	return pubkeyPath, nil
+	pubkeyBytes := pem.EncodeToMemory(pemBlock)
+	return pubkeyBytes, nil
 }

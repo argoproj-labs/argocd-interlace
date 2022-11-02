@@ -101,6 +101,7 @@ type RegistryConfig struct {
 
 type ProvenanceConfig struct {
 	KeyConfig KeyConfig `json:"key,omitempty"`
+	RekorURL  string    `json:"rekorURL,omitempty"`
 }
 
 type ResourceMatchPattern struct {

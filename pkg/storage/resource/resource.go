@@ -43,19 +43,21 @@ type ResourceStorageBackend struct {
 	interlaceNS           string
 	maxResults            int
 	uploadTLog            bool
+	rekorURL              string
 	manifestImage         string
 	registrySecret        string
 	allowInsecureRegistry bool
 	kubeConfig            *rest.Config
 }
 
-func NewStorageBackend(appData application.ApplicationData, appProvClientset appprovClientset.Interface, interlaceNS string, maxResults int, uploadTLog bool, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*ResourceStorageBackend, error) {
+func NewStorageBackend(appData application.ApplicationData, appProvClientset appprovClientset.Interface, interlaceNS string, maxResults int, uploadTLog bool, rekorURL, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*ResourceStorageBackend, error) {
 	return &ResourceStorageBackend{
 		appData:               appData,
 		appProvClientset:      appProvClientset,
 		interlaceNS:           interlaceNS,
 		maxResults:            maxResults,
 		uploadTLog:            uploadTLog,
+		rekorURL:              rekorURL,
 		manifestImage:         manifestImage,
 		registrySecret:        registrySecret,
 		allowInsecureRegistry: allowInsecureRegistry,
@@ -250,7 +252,7 @@ func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Tim
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
 	}
-	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, s.rekorURL, buildStartedOn, buildFinishedOn)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate provenance data")
 	}

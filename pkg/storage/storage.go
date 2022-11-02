@@ -62,6 +62,7 @@ type StorageConfig struct {
 	APIPassword string
 
 	UploadTLog bool
+	RekorURL   string
 
 	// manifest image
 	ManifestImage         string
@@ -75,19 +76,19 @@ func InitializeStorageBackends(c StorageConfig, kubeConfig *rest.Config) (map[st
 		if c.ManifestStorageType == backendType {
 			switch backendType {
 			case annotation.StorageBackendAnnotation:
-				annotationStorageBackend, err := annotation.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
+				annotationStorageBackend, err := annotation.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.RekorURL, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}
 				storageBackends[backendType] = annotationStorageBackend
 			case resource.StorageBackendResource:
-				resourceStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
+				resourceStorageBackend, err := resource.NewStorageBackend(c.AppData, c.AppProvClientset, c.InterlaceNS, c.MaxResultsInResource, c.UploadTLog, c.RekorURL, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}
 				storageBackends[backendType] = resourceStorageBackend
 			case oci.StorageBackendOCI:
-				ociStorageBackend, err := oci.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
+				ociStorageBackend, err := oci.NewStorageBackend(c.AppData, c.InterlaceNS, c.UploadTLog, c.RekorURL, c.ManifestImage, c.RegistrySecret, c.AllowInsecureRegistry, kubeConfig)
 				if err != nil {
 					return nil, err
 				}

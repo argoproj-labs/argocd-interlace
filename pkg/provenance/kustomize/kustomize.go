@@ -21,9 +21,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,9 +40,7 @@ import (
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
 	"github.com/pkg/errors"
-	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 	log "github.com/sirupsen/logrus"
-	"github.com/theupdateframework/go-tuf/encrypted"
 	"github.com/tidwall/gjson"
 )
 
@@ -67,7 +63,7 @@ func NewProvenanceManager(appData application.ApplicationData) (*KustomizeProven
 	}, nil
 }
 
-func (p *KustomizeProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+func (p *KustomizeProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, rekorURL string, buildStartedOn time.Time, buildFinishedOn time.Time) error {
 	appName := p.appData.AppName
 	appPath := p.appData.AppPath
 	appSourceRepoUrl := p.appData.AppSourceRepoUrl
@@ -157,7 +153,7 @@ func (p *KustomizeProvenanceManager) GenerateProvenance(target, targetDigest str
 		return errors.Wrap(err, "failed to write the provenance to file")
 	}
 
-	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog, rekorURL)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign the attestation")
 	}
@@ -259,46 +255,6 @@ func GenerateProvenance(artifactName, digest, kustomizeBase string, startTime, f
 		},
 	}
 	return it, nil
-}
-
-// generate a rekor entry data by signing a specified provenance with private key
-// the output data contains a base64 encoded provenance and its signature.
-// it can be used in `rekor-cli upload --artifact xxxxx`.
-func GenerateAttestation(provPath, privKeyPath string) (*dsse.Envelope, error) {
-	b, err := os.ReadFile(provPath)
-	if err != nil {
-		return nil, err
-	}
-	ecdsaPriv, _ := os.ReadFile(filepath.Clean(privKeyPath))
-	pb, _ := pem.Decode(ecdsaPriv)
-	pwd := os.Getenv(cosignPwdEnvKey) //GetPass(true)
-	x509Encoded, err := encrypted.Decrypt(pb.Bytes, []byte(pwd))
-	if err != nil {
-		return nil, err
-	}
-	priv, err := x509.ParsePKCS8PrivateKey(x509Encoded)
-	if err != nil {
-		return nil, err
-	}
-
-	signer, err := dsse.NewEnvelopeSigner(&IntotoSigner{
-		key: priv.(*ecdsa.PrivateKey),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	envelope, err := signer.SignPayload("application/vnd.in-toto+json", b)
-	if err != nil {
-		return nil, err
-	}
-
-	// Now verify
-	_, err = signer.Verify(envelope)
-	if err != nil {
-		return nil, err
-	}
-	return envelope, nil
 }
 
 // get a digest of artifact by checking artifact type

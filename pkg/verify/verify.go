@@ -18,6 +18,8 @@ package verify
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,6 +29,11 @@ import (
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/pkg/errors"
+	cliopt "github.com/sigstore/cosign/cmd/cosign/cli/options"
+	cliverify "github.com/sigstore/cosign/cmd/cosign/cli/verify"
+	cosignsig "github.com/sigstore/cosign/pkg/signature"
+	fulcioapi "github.com/sigstore/fulcio/pkg/api"
+
 	log "github.com/sirupsen/logrus"
 
 	// package golang.org/x/crypto/openpgp is deprecated: this package is unmaintained except for security fixes.
@@ -37,11 +44,13 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-func VerifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, []byte, error) {
+func VerifyGPGSignature(keyPath string, msg, sig []byte) (bool, string, *Signer, []byte, error) {
+	msgReader := bytes.NewBuffer(msg)
+	sigReader := bytes.NewBuffer(sig)
 
-	if keyRing, err := LoadPublicKey(keyPath); err != nil {
+	if keyRing, err := LoadGPGPublicKey(keyPath); err != nil {
 		return false, "Error when loading key ring", nil, nil, err
-	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msg, sig, nil); signer == nil {
+	} else if signer, err := openpgp.CheckArmoredDetachedSignature(keyRing, msgReader, sigReader, nil); signer == nil {
 		if err != nil {
 			log.Error("Signature verification error:", err.Error())
 		}
@@ -54,6 +63,44 @@ func VerifySignature(keyPath string, msg, sig *os.File) (bool, string, *Signer, 
 		}
 		return true, "", NewSignerFromUserId(idt.UserId), []byte(fingerprint), nil
 	}
+}
+
+func VerifyCosignSignature(keyPath string, msg, sig []byte) (bool, error) {
+	sk := false
+	idToken := ""
+	opt := cliopt.KeyOpts{
+		Sk:        sk,
+		IDToken:   idToken,
+		RekorURL:  utils.GetRekorURL(""),
+		FulcioURL: fulcioapi.SigstorePublicServerURL,
+	}
+
+	if keyPath != "" {
+		opt.KeyRef = keyPath
+	}
+
+	stdinReader, stdinWriter, err := os.Pipe()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create a virtual standard input")
+	}
+	b64Sig := sig // cosign sign-blob outputs b64sig into signature file
+	origStdin := os.Stdin
+	os.Stdin = stdinReader
+	_, err = stdinWriter.Write(msg)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to write a message data to virtual standard input")
+	}
+	_ = stdinWriter.Close()
+	err = cliverify.VerifyBlobCmd(context.Background(), opt, "", "", "", "", string(b64Sig), "-", "", "", "", "", "", false)
+	if err != nil {
+		return false, errors.Wrap(err, "cosign.VerifyBlobCmd() returned an error")
+	}
+	os.Stdin = origStdin
+	verified := false
+	if err == nil {
+		verified = true
+	}
+	return verified, nil
 }
 
 func GetFirstIdentity(signer *openpgp.Entity) *openpgp.Identity {
@@ -88,7 +135,7 @@ func NewSignerFromUserId(uid *packet.UserId) *Signer {
 	}
 }
 
-func LoadPublicKey(keyPath string) (openpgp.EntityList, error) {
+func LoadGPGPublicKey(keyPath string) (openpgp.EntityList, error) {
 	var keyRingReader io.Reader
 	var err error
 
@@ -152,4 +199,48 @@ func CompareHash(sourceMaterialPath string, baseDir string) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+type SigType string
+
+const (
+	SigTypeUnknown = ""
+	SigTypeCosign  = "cosign"
+	SigTypePGP     = "pgp"
+	// SigTypeX509    = "x509"
+)
+
+func GetSignatureTypeFromPublicKey(pubkeyPathPtr *string) SigType {
+	// keyless
+	if pubkeyPathPtr == nil {
+		return SigTypeCosign
+	}
+
+	// key-ed
+	pubkeyPath := *pubkeyPathPtr
+
+	sumErr := map[string]string{}
+
+	// cosign public key
+	if _, err := cosignsig.PublicKeyFromKeyRef(context.Background(), pubkeyPath); err == nil {
+		return SigTypeCosign
+	} else {
+		sumErr["cosign"] = err.Error()
+	}
+
+	// pgp public key
+	if _, err := LoadGPGPublicKey(pubkeyPath); err == nil {
+		return SigTypePGP
+	} else {
+		sumErr["pgp"] = err.Error()
+	}
+
+	// if not defined after all types, report warning
+	detail := ""
+	for sigT, errStr := range sumErr {
+		detail = fmt.Sprintf("%s`%s`: `%s`; ", detail, sigT, errStr)
+	}
+	log.Warnf("failed to load the public key `%s` as any known types; %s", pubkeyPath, detail)
+
+	return SigTypeUnknown
 }
