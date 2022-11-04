@@ -18,9 +18,6 @@ package interlace
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/pem"
-	"strings"
 	"time"
 
 	iprof "github.com/argoproj-labs/argocd-interlace/pkg/apis/interlaceprofile/v1beta1"
@@ -37,7 +34,6 @@ import (
 	appv1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	appClientset "github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
 	"github.com/pkg/errors"
-	"github.com/sigstore/cosign/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -376,37 +372,4 @@ func getKeyPEMFromKeyConfig(keyConfig iprof.KeyConfig, kubeConfig *rest.Config, 
 		return key, nil
 	}
 	return nil, errors.New("failed to get key data from key config")
-}
-
-func getGitAuthInfoFromSecret(kubeConfig *rest.Config, secretName, interlaceNS string) (string, string, string, error) {
-	secret, err := utils.GetSecret(kubeConfig, interlaceNS, secretName)
-	if err != nil {
-		return "", "", "", errors.Wrap(err, "failed to get secret")
-	}
-	user := secret.Data["user"]
-	token := secret.Data["token"]
-	email := secret.Data["email"]
-	gitUser := strings.TrimSuffix(string(user), "\n")
-	gitToken := strings.TrimSuffix(string(token), "\n")
-	gitEmail := strings.TrimSuffix(string(email), "\n")
-	return gitUser, gitToken, gitEmail, nil
-}
-
-func extractPubkeyFromPrivKey(privkeyBytes []byte) ([]byte, error) {
-	passwd := utils.GetCosignPassword()
-	signerVerifier, err := cosign.LoadPrivateKey(privkeyBytes, []byte(passwd))
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to load private key")
-	}
-	pubkey, err := signerVerifier.PublicKey()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get public key from signerVerifier")
-	}
-	pubkeyASNBytes, err := x509.MarshalPKIXPublicKey(pubkey)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal public key")
-	}
-	pemBlock := &pem.Block{Type: "PUBLIC KEY", Bytes: pubkeyASNBytes}
-	pubkeyBytes := pem.EncodeToMemory(pemBlock)
-	return pubkeyBytes, nil
 }

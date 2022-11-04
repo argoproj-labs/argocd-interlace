@@ -55,8 +55,6 @@ const (
 	ProvenanceAnnotation = "kustomize"
 )
 
-const cosignPwdEnvKey = "COSIGN_PASSWORD"
-
 func NewProvenanceManager(appData application.ApplicationData) (*KustomizeProvenanceManager, error) {
 	return &KustomizeProvenanceManager{
 		appData: appData,

@@ -264,7 +264,13 @@ func PatchResource(apiBaseURL, appName, namespace, resourceName, group, version,
 	if err != nil {
 		return errors.Wrap(err, "failed to patch resource")
 	}
-	log.Debugf("patch resource response: %s", resourcePatchResp.Manifest)
+	respMsg := ""
+	if resourcePatchResp != nil {
+		if resourcePatchResp.Manifest != nil {
+			respMsg = *(resourcePatchResp.Manifest)
+		}
+	}
+	log.Debugf("patch resource response: %s", respMsg)
 	return nil
 }
 

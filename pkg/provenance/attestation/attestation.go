@@ -29,14 +29,11 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 
-	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
@@ -57,7 +54,6 @@ const (
 )
 
 const (
-	cli              = "/usr/local/bin/rekor-cli"
 	publicKeyPEMType = "PUBLIC KEY"
 )
 
@@ -291,88 +287,6 @@ func tryUpload(rekorClient *gen_client.Rekor, entry models.ProposedEntry) (*entr
 		return nil, err
 	}
 	return resp, nil
-}
-
-func upload_cli(it in_toto.Statement, attestationPath, appName, pubkeyPath string) (*provenance.ProvenanceRef, error) {
-	// If we do it twice, it should already exist
-	out, err := runCli("upload", "--artifact", attestationPath, "--type", "intoto", "--public-key", pubkeyPath, "--pki-format", "x509")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to upload attestation to rekor")
-	}
-
-	outputContains(out, "Created entry at")
-
-	uuid, url := getUUIDFromUploadOutput(out)
-
-	log.Infof("[%s] Interlace generated provenance record of manifest build with uuid: %s, url: %s", appName, uuid, url)
-
-	log.Infof("[%s] Interlace stores attestation to provenance record to Rekor transparency log", appName)
-
-	log.Infof("[%s] %s", appName, out)
-
-	if uuid != "" && url != "" {
-		return &provenance.ProvenanceRef{UUID: uuid, URL: url}, nil
-	}
-	return nil, errors.New("unknown error while uploading attestation to rekor")
-}
-
-func outputContains(output, sub string) {
-
-	if !strings.Contains(output, sub) {
-		log.Infof(fmt.Sprintf("Expected [%s] in response, got %s", sub, output))
-	}
-}
-
-func getUUIDFromUploadOutput(out string) (string, string) {
-
-	// Output looks like "Artifact timestamped at ...\m Wrote response \n Created entry at index X, available at $URL/UUID", so grab the UUID:
-	// Example) Created entry at index 1587352, available at: https://rekor.sigstore.dev/api/v1/log/entries/d07107983ad1044259813fff2ff90e1f1a30009b4f43723f2205ad5d02ba43be\n
-	parts := strings.Split(strings.TrimSpace(out), ", ")
-	if len(parts) != 2 {
-		return "", ""
-	}
-	uuid := strings.TrimSpace(strings.ReplaceAll(parts[0], "Created entry at index ", ""))
-	url := strings.TrimSuffix(strings.TrimSpace(strings.ReplaceAll(parts[1], "available at: ", "")), "\n")
-	return uuid, url
-}
-
-func runCli(arg ...string) (string, error) {
-	interlaceConfig, err := config.GetInterlaceConfig()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to load interlace config")
-	}
-
-	rekorServer := interlaceConfig.RekorServer
-
-	argStr := fmt.Sprintf("--rekor_server=%s", rekorServer)
-
-	arg = append(arg, argStr)
-	// use a blank config file to ensure no collision
-	if interlaceConfig.RekorTmpDir != "" {
-		arg = append(arg, "--config="+interlaceConfig.RekorTmpDir+".rekor.yaml")
-	}
-	return run("", cli, arg...)
-
-}
-
-func run(stdin, cmd string, arg ...string) (string, error) {
-	interlaceConfig, err := config.GetInterlaceConfig()
-	if err != nil {
-		return "", errors.Wrap(err, "failed to load interlace config")
-	}
-	c := exec.Command(cmd, arg...)
-	if stdin != "" {
-		c.Stdin = strings.NewReader(stdin)
-	}
-	if interlaceConfig.RekorTmpDir != "" {
-		// ensure that we use a clean state.json file for each run
-		c.Env = append(c.Env, "HOME="+interlaceConfig.RekorTmpDir)
-	}
-	b, err := c.CombinedOutput()
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to execute command \"%s %s\"", cmd, strings.Join(arg, " "))
-	}
-	return string(b), nil
 }
 
 func getPublicKeyBytes(pubkey crypto.PublicKey) ([]byte, error) {

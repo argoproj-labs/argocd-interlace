@@ -57,7 +57,7 @@ const (
 	defaultTlogUploadTimeout = 90 // set to 90s for keyless as cosign recommends it in the help message
 )
 
-//GetK8sClient returns a kubernetes client and config
+// GetK8sClient returns a kubernetes client and config
 func GetK8sClient(configpath string) (*kubernetes.Clientset, *rest.Config, error) {
 
 	if configpath == "" {
