@@ -1,5 +1,5 @@
 //
-// Copyright 2021 IBM Corporation
+// Copyright 2022 IBM Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 	"github.com/argoproj-labs/argocd-interlace/pkg/utils"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	intotoprov02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
-	log "github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
 )
 
 type HelmProvenanceManager struct {
@@ -49,17 +49,18 @@ func NewProvenanceManager(appData application.ApplicationData) (*HelmProvenanceM
 	}, nil
 }
 
-func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error {
-	appName := p.appData.AppName
-	appSourceRevision := p.appData.AppSourceRevision
+func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, privkeyBytes []byte, uploadTLog bool, rekorURL string, buildStartedOn time.Time, buildFinishedOn time.Time) error {
+	appName := p.appData.AppNamespace
 	appDirPath := p.appData.AppDirPath
-	chart := p.appData.Chart
 
-	entryPoint := "helm"
-	helmChart := fmt.Sprintf("%s-%s.tgz", chart, appSourceRevision)
+	entryPoint := "argocd-interlace"
+	applicationBytes, err := json.Marshal(p.appData.Object)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal Application data")
+	}
 	invocation := intotoprov02.ProvenanceInvocation{
 		ConfigSource: intotoprov02.ConfigSource{EntryPoint: entryPoint},
-		Parameters:   []string{"install", chart, helmChart},
+		Parameters:   map[string]string{"applicationSnapshot": string(applicationBytes)},
 	}
 
 	subjects := []in_toto.Subject{}
@@ -93,20 +94,17 @@ func (p *HelmProvenanceManager) GenerateProvenance(target, targetDigest string, 
 	p.prov = it
 	b, err := json.Marshal(it)
 	if err != nil {
-		log.Errorf("Error in marshaling attestation:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to marshal attestation data")
 	}
 
 	err = utils.WriteToFile(string(b), appDirPath, config.PROVENANCE_FILE_NAME)
 	if err != nil {
-		log.Errorf("Error in writing provenance to a file:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to write the provenance to file")
 	}
 
-	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, uploadTLog)
+	provSig, provRef, err := attestation.GenerateSignedAttestation(it, appName, appDirPath, privkeyBytes, uploadTLog, rekorURL)
 	if err != nil {
-		log.Errorf("Error in generating signed attestation:  %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to sign the attestation")
 	}
 	if provSig != nil {
 		p.sig = provSig
@@ -147,51 +145,6 @@ func (p *HelmProvenanceManager) generateMaterial() []intotoprov02.ProvenanceMate
 		},
 	})
 	return materials
-}
-
-func (p *HelmProvenanceManager) VerifySourceMaterial() (bool, error) {
-
-	appPath := p.appData.AppPath
-	repoUrl := p.appData.AppSourceRepoUrl
-	chart := p.appData.Chart
-	targetRevision := p.appData.AppSourceRevision
-
-	mkDirCmd := "mkdir"
-	_, err := utils.CmdExec(mkDirCmd, "", appPath)
-	if err != nil {
-		log.Infof("mkdir returns error : %s ", err.Error())
-		return false, err
-	}
-	helmChartUrl := fmt.Sprintf("%s/%s-%s.tgz", repoUrl, chart, targetRevision)
-
-	chartPath := fmt.Sprintf("%s/%s-%s.tgz", appPath, chart, targetRevision)
-	curlCmd := "curl"
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartUrl, "--output", chartPath)
-	if err != nil {
-		log.Infof("Retrive Helm Chart : %s ", err.Error())
-		return false, err
-	}
-
-	helmChartProvUrl := fmt.Sprintf("%s/%s-%s.tgz.prov", repoUrl, chart, targetRevision)
-	provPath := fmt.Sprintf("%s/%s-%s.tgz.prov", appPath, chart, targetRevision)
-	_, err = utils.CmdExec(curlCmd, appPath, helmChartProvUrl, "--output", provPath)
-	if err != nil {
-		log.Infof("Retrive Helm Chart Prov : %s ", err.Error())
-		return false, err
-	}
-
-	helmCmd := "helm"
-
-	_, err = utils.CmdExec(helmCmd, appPath, "sigstore", "verify", chartPath)
-	if err != nil {
-		log.Infof("Helm-sigstore verify : %s ", err.Error())
-		return false, err
-	}
-
-	log.Infof("[INFO]: Helm sigstore verify was successful for the  Helm chart: %s ", p.appData.Chart)
-
-	return true, nil
-
 }
 
 func (p *HelmProvenanceManager) GetProvenance() in_toto.Statement {

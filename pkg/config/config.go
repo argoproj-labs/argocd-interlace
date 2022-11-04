@@ -16,9 +16,7 @@ import (
 )
 
 const (
-	defaultUsername             = "admin"
-	OutputSignKeyPath           = "/etc/signkey/private_key_pem"  // mounted as a secret
-	SourceMaterialVerifyKeyPath = "/etc/verifykey/public_key_pem" // mounted as a secret
+	defaultUsername = "admin"
 )
 
 const (
@@ -29,6 +27,10 @@ const (
 	ATTESTATION_FILE_NAME     = "attestation.json"
 	SIG_ANNOTATION_NAME       = "cosign.sigstore.dev/signature"
 	MSG_ANNOTATION_NAME       = "cosign.sigstore.dev/message"
+	CRT_ANNOTATION_NAME       = "cosign.sigstore.dev/certificate"
+	BDL_ANNOTATION_NAME       = "cosign.sigstore.dev/bundle"
+
+	APP_MANIFEST_IMAGE_ANNOTATION_NAME = "interlace.argocd.dev/manifestImage"
 )
 
 type InterlaceConfig struct {

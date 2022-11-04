@@ -1,5 +1,5 @@
 //
-// Copyright 2021 IBM Corporation
+// Copyright 2022 IBM Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,8 +32,7 @@ import (
 const maxTrialGetAttestation = 3
 
 type ProvenanceManager interface {
-	GenerateProvenance(target, targatDigest string, uploadTLog bool, buildStartedOn time.Time, buildFinishedOn time.Time) error
-	VerifySourceMaterial() (bool, error)
+	GenerateProvenance(target, targatDigest string, privkeyBytes []byte, uploadTLog bool, rekorURL string, buildStartedOn time.Time, buildFinishedOn time.Time) error
 	GetProvenance() in_toto.Statement
 	GetProvSignature() []byte
 }

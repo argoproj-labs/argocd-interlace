@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	appprov "github.com/argoproj-labs/argocd-interlace/pkg/apis/applicationprovenance/v1beta1"
 	"github.com/argoproj-labs/argocd-interlace/pkg/application"
-	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/clientset/versioned"
+	appprovClientset "github.com/argoproj-labs/argocd-interlace/pkg/client/applicationprovenance/clientset/versioned"
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
 	"github.com/argoproj-labs/argocd-interlace/pkg/manifest"
 	"github.com/argoproj-labs/argocd-interlace/pkg/provenance"
@@ -27,6 +28,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -37,19 +39,29 @@ type ResourceStorageBackend struct {
 	appData application.ApplicationData
 	provMgr provenance.ProvenanceManager
 
-	appProvClientset appprovClientset.Interface
-	interlaceNS      string
-	maxResults       int
-	uploadTLog       bool
+	appProvClientset      appprovClientset.Interface
+	interlaceNS           string
+	maxResults            int
+	uploadTLog            bool
+	rekorURL              string
+	manifestImage         string
+	registrySecret        string
+	allowInsecureRegistry bool
+	kubeConfig            *rest.Config
 }
 
-func NewStorageBackend(appData application.ApplicationData, appProvClientset appprovClientset.Interface, interlaceNS string, maxResults int, uploadTLog bool) (*ResourceStorageBackend, error) {
+func NewStorageBackend(appData application.ApplicationData, appProvClientset appprovClientset.Interface, interlaceNS string, maxResults int, uploadTLog bool, rekorURL, manifestImage string, registrySecret string, allowInsecureRegistry bool, kubeConfig *rest.Config) (*ResourceStorageBackend, error) {
 	return &ResourceStorageBackend{
-		appData:          appData,
-		appProvClientset: appProvClientset,
-		interlaceNS:      interlaceNS,
-		maxResults:       maxResults,
-		uploadTLog:       uploadTLog,
+		appData:               appData,
+		appProvClientset:      appProvClientset,
+		interlaceNS:           interlaceNS,
+		maxResults:            maxResults,
+		uploadTLog:            uploadTLog,
+		rekorURL:              rekorURL,
+		manifestImage:         manifestImage,
+		registrySecret:        registrySecret,
+		allowInsecureRegistry: allowInsecureRegistry,
+		kubeConfig:            kubeConfig,
 	}, nil
 }
 
@@ -57,33 +69,47 @@ func (s *ResourceStorageBackend) GetLatestManifestContent() ([]byte, error) {
 	return nil, nil
 }
 
-func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
+func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool, manifestBytes, privkeyBytes []byte) error {
 
-	keyPath := config.OutputSignKeyPath
-	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
 	signedManifestPath := filepath.Join(s.appData.AppDirPath, config.SIGNED_MANIFEST_FILE_NAME)
 
-	manifestBytes, err := ioutil.ReadFile(manifestPath)
-	if err != nil {
-		return errors.Wrap(err, "error in reading manifest")
-	}
 	log.Debugf("manifest bytes: %s", string(manifestBytes))
 
-	ecdsaPriv, err := ioutil.ReadFile(filepath.Clean(keyPath))
+	manifestFile, err := ioutil.TempFile("", "manifest.yaml")
 	if err != nil {
-		return errors.Wrap(err, "error in reading private key")
+		return errors.Wrap(err, "error in creating a temp manifest file")
 	}
+	defer os.Remove(manifestFile.Name())
+
+	_, err = manifestFile.Write(manifestBytes)
+	if err != nil {
+		return errors.Wrap(err, "error in saving the manifest as a temp file")
+	}
+	manifestPath := manifestFile.Name()
+
 	doSigning := true
 	// if signing key is empty, do not sign the manifest and return here
-	if string(ecdsaPriv) == "" {
+	if string(privkeyBytes) == "" {
 		log.Warnf("signing key is empty, so skip signing the manifest")
 		doSigning = false
 	}
+
 	if doSigning {
+		privkeyFile, err := ioutil.TempFile("", "privkey")
+		if err != nil {
+			return errors.Wrap(err, "error in creating a temp key file")
+		}
+		defer os.Remove(privkeyFile.Name())
+
+		_, err = privkeyFile.Write(privkeyBytes)
+		if err != nil {
+			return errors.Wrap(err, "error in saving the signing key as a temp file")
+		}
+
+		keyPath := privkeyFile.Name()
 		signedBytes, err := sign.SignManifest(keyPath, manifestPath, signedManifestPath)
 		if err != nil {
-			log.Errorf("Error in signing manifest: %s", err.Error())
-			return err
+			return errors.Wrap(err, "error in signing manifest")
 		}
 		manifestBytes = signedBytes
 	}
@@ -137,29 +163,40 @@ func (s *ResourceStorageBackend) StoreManifestBundle(sourceVerifed bool) error {
 
 			patchData, err := preparePatch(message, signature, kind)
 			if err != nil {
-				log.Errorf("Error in creating patch for application resource config: %s", err.Error())
-				return err
+				return errors.Wrap(err, "error in creating patch for application resource config")
 			}
 
 			log.Info("len(patchData)", len(patchData))
 
-			log.Infof("[INFO][%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
+			log.Infof("[%s] Interlace attaches signature to resource as annotation:", s.appData.AppName)
 
 			err = argoutil.ApplyResourcePatch(kind, resourceName, namespace, s.appData.AppName, patchData)
 			// err = argoutil.PatchResource(interlaceConfig.ArgocdApiBaseUrl, s.appData.AppName, namespace, resourceName, gv.Group, gv.Version, kind, patchData)
 
 			if err != nil {
-				log.Errorf("Error in patching application resource config: %s", err.Error())
-				return nil
+				return errors.Wrap(err, "error in patching application resource config")
 			}
-
 		}
-
 	}
 
 	if err != nil {
-		log.Errorf("Error in getting digest: %s ", err.Error())
-		return err
+		return errors.Wrap(err, "error in getting digest")
+	}
+
+	if s.manifestImage != "" {
+		secretKeychain := &utils.SecretKeyChain{
+			Name:       s.registrySecret,
+			Namespace:  s.interlaceNS,
+			KubeConfig: s.kubeConfig,
+		}
+		err = utils.UploadManifestImage(manifestBytes, s.manifestImage, s.allowInsecureRegistry, secretKeychain)
+		if err != nil {
+			return errors.Wrap(err, "failed to upload manifest image")
+		}
+		err = utils.SignImage(s.manifestImage, privkeyBytes, "", s.uploadTLog, s.allowInsecureRegistry, secretKeychain)
+		if err != nil {
+			return errors.Wrap(err, "failed to sign the uploaded manifest image")
+		}
 	}
 	return nil
 }
@@ -192,11 +229,21 @@ func preparePatch(message, signature, kind string) ([]byte, error) {
 	return json.Marshal(patchData)
 }
 
-func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool) error {
-	manifestPath := filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
-	computedFileHash, err := utils.ComputeHash(manifestPath)
-	if err != nil {
-		return errors.Wrap(err, "error when computing hash values of source repo contents")
+func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Time, buildFinishedOn time.Time, sourceVerified bool, privkeyBytes []byte) error {
+	var target, hash string
+	var err error
+	if s.manifestImage != "" {
+		target = s.manifestImage
+		hash, err = utils.GetImageHash(target)
+		if err != nil {
+			return errors.Wrap(err, "failed to get image digest")
+		}
+	} else {
+		target = filepath.Join(s.appData.AppDirPath, config.MANIFEST_FILE_NAME)
+		hash, err = utils.ComputeHash(target)
+		if err != nil {
+			return errors.Wrap(err, "failed to compute hash value of the manifest file")
+		}
 	}
 
 	var provMgr provenance.ProvenanceManager
@@ -205,10 +252,9 @@ func (s *ResourceStorageBackend) StoreManifestProvenance(buildStartedOn time.Tim
 	} else {
 		provMgr, _ = kustprov.NewProvenanceManager(s.appData)
 	}
-	err = provMgr.GenerateProvenance(manifestPath, computedFileHash, s.uploadTLog, buildStartedOn, buildFinishedOn)
+	err = provMgr.GenerateProvenance(target, hash, privkeyBytes, s.uploadTLog, s.rekorURL, buildStartedOn, buildFinishedOn)
 	if err != nil {
-		log.Errorf("Error in generating provenance: %s", err.Error())
-		return err
+		return errors.Wrap(err, "failed to generate provenance data")
 	}
 	s.provMgr = provMgr
 

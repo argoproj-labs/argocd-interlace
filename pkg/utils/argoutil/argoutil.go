@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -17,7 +18,10 @@ import (
 	"github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
 	argoio "github.com/argoproj/argo-cd/v2/util/io"
 	"github.com/pkg/errors"
+	k8sutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const patchType = "application/merge-patch+json"
@@ -25,6 +29,13 @@ const patchType = "application/merge-patch+json"
 const (
 	argocdCmd = "argocd"
 	maxRetry  = 10
+)
+
+const (
+	ARGOCD_CONFIG_NAME    = "argocd-cm"
+	ARGOCD_CONFIG_KIND    = "ConfigMap"
+	ARGOCD_CONFIG_API_VER = "v1"
+	ARGOCD_SECRET_KIND    = "Secret"
 )
 
 // TODO: remove this function once argocd v2.4.0 is released
@@ -237,20 +248,113 @@ func PatchResource(apiBaseURL, appName, namespace, resourceName, group, version,
 	}
 	defer argoio.Close(conn)
 
+	patchStr := string(patchBytes)
+	patchTypeStr := string(patchType)
 	resourcePatchRequest := &application.ApplicationResourcePatchRequest{
 		Name:         &appName,
-		Namespace:    namespace,
-		ResourceName: resourceName,
-		Group:        group,
-		Version:      version,
-		Kind:         kind,
-		Patch:        string(patchBytes),
-		PatchType:    patchType,
+		Namespace:    &namespace,
+		ResourceName: &resourceName,
+		Group:        &group,
+		Version:      &version,
+		Kind:         &kind,
+		Patch:        &patchStr,
+		PatchType:    &patchTypeStr,
 	}
 	resourcePatchResp, err := appClient.PatchResource(context.Background(), resourcePatchRequest)
 	if err != nil {
 		return errors.Wrap(err, "failed to patch resource")
 	}
-	log.Debugf("patch resource response: %s", resourcePatchResp.Manifest)
+	respMsg := ""
+	if resourcePatchResp != nil {
+		if resourcePatchResp.Manifest != nil {
+			respMsg = *(resourcePatchResp.Manifest)
+		}
+	}
+	log.Debugf("patch resource response: %s", respMsg)
 	return nil
+}
+
+func GetRepoCredentials(repoUrl string) string {
+	interlaceConfig, _ := config.GetInterlaceConfig()
+
+	_, cfg, err := utils.GetK8sClient("")
+	if err != nil {
+		log.Errorf("Error occured while reading incluster kubeconfig %s", err.Error())
+		return ""
+	}
+
+	k8sutil.SetKubeConfig(cfg)
+
+	apiVersion := ARGOCD_CONFIG_API_VER
+	kind := ARGOCD_CONFIG_KIND
+	name := ARGOCD_CONFIG_NAME
+	namespace := interlaceConfig.ArgocdNamespace
+
+	argoConfigMapObj, err := k8sutil.GetResource(apiVersion, kind, namespace, name)
+
+	if err != nil {
+		log.Errorf("Error occured while retriving ConfigMap from cluster %s", err.Error())
+		return ""
+	}
+
+	argoConfigMap, err := getConfiMapFromObj(argoConfigMapObj)
+	if err != nil {
+		log.Errorf("Error occured while retriving ConfigMap %s", err.Error())
+		return ""
+	}
+
+	repositories := argoConfigMap.Data["repositories"]
+	found := false
+	secretName := ""
+	for _, line := range strings.Split(strings.TrimSuffix(repositories, "\n"), "\n") {
+
+		data := strings.Split(strings.TrimSuffix(strings.TrimSpace(line), ":"), ":")
+		if data[0] == "url" {
+			url := strings.TrimSpace(data[1] + ":" + data[2])
+			if url == repoUrl {
+				found = true
+			}
+		}
+		if data[0] == "name" {
+			secretName = strings.TrimSpace(data[1])
+		}
+	}
+
+	if found {
+
+		kind = ARGOCD_SECRET_KIND
+
+		argoSecretObj, err := k8sutil.GetResource(apiVersion, kind, namespace, secretName)
+		if err != nil {
+			log.Errorf("Error in getting  resource secret object: %s", err.Error())
+			return ""
+		}
+
+		argoSecret, err := getConfiMapFromObj(argoSecretObj)
+		if err != nil {
+			log.Errorf("Error in getting  secret object: %s", err.Error())
+			return ""
+		}
+
+		gitToken, err := base64.StdEncoding.DecodeString(string(argoSecret.Data["password"]))
+		if err != nil {
+			log.Errorf("Error in decoding password from secret object: %s", err.Error())
+			return ""
+		}
+		log.Info("Found credentials for target git repo: ", repoUrl)
+		return string(gitToken)
+	}
+	return ""
+}
+
+func getConfiMapFromObj(obj *unstructured.Unstructured) (*corev1.ConfigMap, error) {
+
+	var cm corev1.ConfigMap
+	objBytes, _ := json.Marshal(obj.Object)
+	err := json.Unmarshal(objBytes, &cm)
+	if err != nil {
+		return nil, fmt.Errorf("error in converting object to ConfigMap; %s", err.Error())
+	}
+
+	return &cm, nil
 }

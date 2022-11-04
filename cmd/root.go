@@ -1,5 +1,5 @@
 //
-// Copyright 2021 IBM Corporation
+// Copyright 2022 IBM Corporation
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"os"
 
 	"github.com/argoproj-labs/argocd-interlace/pkg/config"
-	"github.com/argoproj-labs/argocd-interlace/pkg/controller"
+	"github.com/argoproj-labs/argocd-interlace/pkg/interlace"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -47,7 +47,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		go controller.Start(ctx, kubeconfig, interlaceConfig)
+		go interlace.Start(ctx, kubeconfig, interlaceConfig)
 
 		// Wait forever
 		select {}
